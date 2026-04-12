@@ -8,11 +8,10 @@ import { API_URL } from '../config';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function ConfirmMedicinesScreen({ route, navigation }) {
-    const { imageUri, medicineHighlights, rawResult, country, currency, userId } = route.params;
+    const { imageUri, medicineHighlights, rawResult, country, currency, userId, prescriptionId, isEditing, image_hash } = route.params;
     const [confirmed, setConfirmed] = useState(
-        // Pre-select high-confidence medicines
         medicineHighlights.reduce((acc, m) => {
-            acc[m.medicine] = m.confidence >= 0.6;
+            acc[m.medicine] = true;
             return acc;
         }, {})
     );
@@ -33,12 +32,12 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
     // Scale OCR bounding box coords accounting for resizeMode="contain" centering
     const scaleBbox = (bbox) => {
         if (!imgLayout || !naturalSize || !bbox) return null;
-        
+
         const containerW = imgLayout.width;
         const containerH = imgLayout.height;
         const imageW = naturalSize.w;
         const imageH = naturalSize.h;
-        
+
         const scale = Math.min(containerW / imageW, containerH / imageH);
         const renderedW = imageW * scale;
         const renderedH = imageH * scale;
@@ -47,7 +46,7 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
 
         const xs = bbox.map(p => p[0]);
         const ys = bbox.map(p => p[1]);
-        
+
         return {
             left: (Math.min(...xs) * scale) + offsetX,
             top: (Math.min(...ys) * scale) + offsetY,
@@ -89,12 +88,24 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
                     raw_text: rawResult.raw_text,
                     avg_confidence: rawResult.avg_confidence,
                     image_url: route.params.image_url,
+                    image_hash: image_hash,
+                    prescription_id: prescriptionId
                 }),
             });
             const data = await res.json();
-            navigation.navigate('SCANNER', { analysisResult: data });
+
+            if (res.ok && data.status === 'success') {
+                if (isEditing) {
+                    navigation.navigate('HISTORY');
+                } else {
+                    navigation.navigate('SCANNER', { analysisResult: data });
+                }
+            } else {
+                Alert.alert('Error', data.message || 'Failed to save prescription.');
+            }
         } catch (e) {
-            Alert.alert('Error', 'Failed to confirm medicines.');
+            console.error('Confirm error:', e);
+            Alert.alert('Error', 'Connection failed. Please check your internet.');
         } finally {
             setLoading(false);
         }

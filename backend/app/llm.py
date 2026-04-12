@@ -4,10 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-FEATHERLESS_API_KEY = os.getenv("FEATHERLESS_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-if not FEATHERLESS_API_KEY:
-    raise ValueError("FEATHERLESS_API_KEY not found in environment variables")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY not found in environment variables")
 
 
 def call_llm(prompt):
@@ -15,13 +15,13 @@ def call_llm(prompt):
 
 def call_llm_chat(messages):
     response = requests.post(
-        "https://api.featherless.ai/v1/chat/completions",
+        "https://api.openai.com/v1/chat/completions",
         headers={
-            "Authorization": f"Bearer {FEATHERLESS_API_KEY}",
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
             "Content-Type": "application/json"
         },
         json={
-            "model": "deepseek-ai/DeepSeek-V3-0324",
+            "model": "gpt-4o",
             "messages": messages,
             "temperature": 0.5
         },

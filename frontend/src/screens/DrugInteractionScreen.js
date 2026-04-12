@@ -1,16 +1,47 @@
 import React, { useState } from 'react';
 import {
     View, Text, StyleSheet, TextInput, TouchableOpacity,
-    ScrollView, SafeAreaView, ActivityIndicator,
+    ScrollView, SafeAreaView, ActivityIndicator, StatusBar,
 } from 'react-native';
-import { COLORS } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, SHADOWS } from '../theme';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { API_URL, COUNTRIES } from '../config';
 
-const SEVERITY = {
-    safe: { color: '#16A34A', bg: '#DCFCE7', border: '#86EFAC', icon: 'checkmark-circle', label: 'Safe combination' },
-    mild: { color: COLORS.warningText, bg: COLORS.warningBg, border: '#FDE68A', icon: 'warning-outline', label: 'Mild interaction — take with caution' },
-    dangerous: { color: COLORS.dangerText, bg: COLORS.dangerBg, border: '#FECACA', icon: 'alert-circle', label: 'Dangerous interaction — consult doctor immediately' },
+const SEVERITY_CONFIG = {
+    safe: {
+        label: 'Safe Combination',
+        sub: 'These medicines are safe to take together',
+        icon: 'shield-check',
+        colors: ['#059669', '#10B981'],
+        textColor: '#065F46',
+        bg: '#ECFDF5',
+        border: '#6EE7B7',
+        barColor: '#10B981',
+        barPct: 15,
+    },
+    mild: {
+        label: 'Mild Interaction',
+        sub: 'Use with caution — monitor for symptoms',
+        icon: 'alert-circle-outline',
+        colors: ['#D97706', '#F59E0B'],
+        textColor: '#92400E',
+        bg: '#FFFBEB',
+        border: '#FCD34D',
+        barColor: '#F59E0B',
+        barPct: 55,
+    },
+    dangerous: {
+        label: 'Dangerous Interaction',
+        sub: 'Consult your doctor immediately',
+        icon: 'alert-octagon',
+        colors: ['#DC2626', '#EF4444'],
+        textColor: '#991B1B',
+        bg: '#FEF2F2',
+        border: '#FCA5A5',
+        barColor: '#EF4444',
+        barPct: 95,
+    },
 };
 
 export default function DrugInteractionScreen() {
@@ -25,21 +56,13 @@ export default function DrugInteractionScreen() {
 
     const checkInteraction = async () => {
         if (!drug1.trim() || !drug2.trim()) return;
-        setLoading(true);
-        setResult(null);
-        setError(null);
-
+        setLoading(true); setResult(null); setError(null);
         try {
             const response = await fetch(`${API_URL}drug-interaction`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    drug1: drug1.trim(),
-                    drug2: drug2.trim(),
-                    country: selectedCountry.value,
-                }),
+                body: JSON.stringify({ drug1: drug1.trim(), drug2: drug2.trim(), country: selectedCountry.value }),
             });
-
             const data = await response.json();
             if (data.status !== 'success') throw new Error(data.detail || 'Server error');
             setResult(data.result);
@@ -50,137 +73,112 @@ export default function DrugInteractionScreen() {
         }
     };
 
-    const inputStyle = (field) => [
-        styles.inputWrapper,
-        focusedField === field && styles.inputFocused,
-    ];
-
-    const SeverityBanner = ({ severity }) => {
-        const s = SEVERITY[severity] || SEVERITY.safe;
-        return (
-            <View style={[styles.severityBanner, { backgroundColor: s.bg, borderColor: s.border }]}>
-                <Ionicons name={s.icon} size={28} color={s.color} />
-                <Text style={[styles.severityLabel, { color: s.color }]}>{s.label}</Text>
-            </View>
-        );
-    };
+    const sev = result ? SEVERITY_CONFIG[result.severity] || SEVERITY_CONFIG.safe : null;
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <StatusBar barStyle="light-content" />
 
-                {/* Header */}
-                <View style={styles.heroCard}>
-                    <View style={styles.heroIcon}>
-                        <MaterialCommunityIcons name="shield-alert-outline" size={36} color={COLORS.accent} />
-                    </View>
-                    <Text style={styles.heroTitle}>Drug Interaction Checker</Text>
-                    <Text style={styles.heroSub}>Enter two medicines to instantly check if they're safe to take together.</Text>
+            {/* Header */}
+            <LinearGradient colors={['#0A1628', '#0F2535']} style={styles.header}>
+                <LinearGradient colors={['#7C3AED', '#6D28D9']} style={styles.headerIcon}>
+                    <MaterialCommunityIcons name="shield-search" size={36} color={COLORS.textMuted} />
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.headerTitle}>Drug Interaction Checker</Text>
+                    <Text style={styles.headerSub}>Check if two medicines are safe together</Text>
                 </View>
+            </LinearGradient>
 
-                {/* Inputs */}
-                <View style={styles.inputsCard}>
-
-                    {/* Country Picker */}
-                    <View>
-                        <Text style={styles.label}>Your country</Text>
-                        <TouchableOpacity
-                            style={styles.countrySelector}
-                            onPress={() => setShowCountryPicker(!showCountryPicker)}
-                        >
-                            <Text style={styles.countrySelectorText}>{selectedCountry.label}</Text>
-                            <Feather name={showCountryPicker ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.textSecondary} />
-                        </TouchableOpacity>
-                        {showCountryPicker && (
-                            <View style={styles.countryDropdown}>
-                                {COUNTRIES.map((c) => (
-                                    <TouchableOpacity
-                                        key={c.value}
-                                        style={[
-                                            styles.countryOption,
-                                            selectedCountry.value === c.value && styles.countryOptionSelected,
-                                        ]}
-                                        onPress={() => {
-                                            setSelectedCountry(c);
-                                            setShowCountryPicker(false);
-                                        }}
-                                    >
-                                        <Text style={[
-                                            styles.countryOptionText,
-                                            selectedCountry.value === c.value && styles.countryOptionTextSelected,
-                                        ]}>
-                                            {c.label}
-                                        </Text>
-                                        {selectedCountry.value === c.value && (
-                                            <Feather name="check" size={14} color={COLORS.primary} />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )}
+            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                {!result && !error && (
+                    <View style={styles.emptyState}>
+                        <MaterialCommunityIcons name="shield-search" size={48} color="#10B981" />
+                        <Text style={styles.emptyTitle}>Enter two medicines below</Text>
+                        <Text style={styles.emptyText}>We'll instantly check if they're safe to take together using medical databases</Text>
                     </View>
+                )}
+                {/* Input Card */}
+                <View style={styles.inputCard}>
 
-                    {/* Drug 1 */}
-                    <View>
-                        <Text style={styles.label}>First medicine</Text>
-                        <View style={inputStyle('drug1')}>
-                            <MaterialCommunityIcons
-                                name="pill"
-                                size={18}
-                                color={focusedField === 'drug1' ? COLORS.primary : COLORS.textSecondary}
-                                style={{ marginRight: 10 }}
-                            />
+                    {/* Country */}
+                    <TouchableOpacity
+                        style={styles.countryBtn}
+                        onPress={() => setShowCountryPicker(!showCountryPicker)}
+                    >
+                        <MaterialCommunityIcons name="earth" size={16} color={COLORS.primary} />
+                        <Text style={styles.countryBtnText}>{selectedCountry.label}</Text>
+                        <Feather name={showCountryPicker ? 'chevron-up' : 'chevron-down'} size={14} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+
+                    {showCountryPicker && (
+                        <View style={styles.countryDropdown}>
+                            {COUNTRIES.map(c => (
+                                <TouchableOpacity
+                                    key={c.value}
+                                    style={[styles.countryOption, selectedCountry.value === c.value && styles.countryOptionActive]}
+                                    onPress={() => { setSelectedCountry(c); setShowCountryPicker(false); }}
+                                >
+                                    <Text style={[styles.countryOptionText, selectedCountry.value === c.value && { color: COLORS.primary, fontWeight: '700' }]}>
+                                        {c.label}
+                                    </Text>
+                                    {selectedCountry.value === c.value && <Feather name="check" size={14} color={COLORS.primary} />}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
+
+                    <View style={styles.drugsContainer}>
+                        {/* Drug 1 */}
+                        <View style={[styles.drugInput, focusedField === 'drug1' && styles.drugInputFocused]}>
+                            <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.drugPillIcon}>
+                                <MaterialCommunityIcons name="pill" size={14} color="#fff" />
+                            </LinearGradient>
                             <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Paracetamol"
-                                placeholderTextColor={COLORS.textSecondary + '80'}
+                                style={styles.drugTextInput}
+                                placeholder="First medicine"
+                                placeholderTextColor={COLORS.textMuted}
                                 value={drug1}
                                 onChangeText={setDrug1}
                                 onFocus={() => setFocusedField('drug1')}
                                 onBlur={() => setFocusedField(null)}
                             />
                             {drug1 ? (
-                                <TouchableOpacity onPress={() => setDrug1('')}>
-                                    <Feather name="x" size={16} color={COLORS.textSecondary} />
+                                <TouchableOpacity onPress={() => setDrug1('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Feather name="x-circle" size={16} color={COLORS.textMuted} />
                                 </TouchableOpacity>
                             ) : null}
                         </View>
-                    </View>
 
-                    {/* Swap */}
-                    <View style={styles.swapRow}>
-                        <View style={styles.dividerLine} />
-                        <TouchableOpacity
-                            style={styles.swapBtn}
-                            onPress={() => { setDrug1(drug2); setDrug2(drug1); }}
-                        >
-                            <MaterialCommunityIcons name="swap-vertical" size={20} color={COLORS.textSecondary} />
-                        </TouchableOpacity>
-                        <View style={styles.dividerLine} />
-                    </View>
+                        {/* VS divider */}
+                        <View style={styles.vsDivider}>
+                            <View style={styles.vsDividerLine} />
+                            <TouchableOpacity
+                                style={styles.swapBtn}
+                                onPress={() => { setDrug1(drug2); setDrug2(drug1); }}
+                            >
+                                <MaterialCommunityIcons name="swap-vertical" size={18} color={COLORS.textSecondary} />
+                            </TouchableOpacity>
+                            <View style={styles.vsDividerLine} />
+                        </View>
 
-                    {/* Drug 2 */}
-                    <View>
-                        <Text style={styles.label}>Second medicine</Text>
-                        <View style={inputStyle('drug2')}>
-                            <MaterialCommunityIcons
-                                name="pill"
-                                size={18}
-                                color={focusedField === 'drug2' ? COLORS.primary : COLORS.textSecondary}
-                                style={{ marginRight: 10 }}
-                            />
+                        {/* Drug 2 */}
+                        <View style={[styles.drugInput, focusedField === 'drug2' && styles.drugInputFocused]}>
+                            <LinearGradient colors={['#7C3AED', '#6D28D9']} style={styles.drugPillIcon}>
+                                <MaterialCommunityIcons name="pill" size={14} color="#fff" />
+                            </LinearGradient>
                             <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Ibuprofen"
-                                placeholderTextColor={COLORS.textSecondary + '80'}
+                                style={styles.drugTextInput}
+                                placeholder="Second medicine"
+                                placeholderTextColor={COLORS.textMuted}
                                 value={drug2}
                                 onChangeText={setDrug2}
                                 onFocus={() => setFocusedField('drug2')}
                                 onBlur={() => setFocusedField(null)}
                             />
                             {drug2 ? (
-                                <TouchableOpacity onPress={() => setDrug2('')}>
-                                    <Feather name="x" size={16} color={COLORS.textSecondary} />
+                                <TouchableOpacity onPress={() => setDrug2('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Feather name="x-circle" size={16} color={COLORS.textMuted} />
                                 </TouchableOpacity>
                             ) : null}
                         </View>
@@ -188,18 +186,22 @@ export default function DrugInteractionScreen() {
 
                     {/* Check Button */}
                     <TouchableOpacity
-                        style={[styles.checkBtn, (!drug1 || !drug2 || loading) && styles.checkBtnDisabled]}
-                        onPress={checkInteraction}
                         disabled={!drug1 || !drug2 || loading}
+                        onPress={checkInteraction}
                         activeOpacity={0.85}
                     >
-                        {loading
-                            ? <ActivityIndicator color={COLORS.white} />
-                            : <>
-                                <Feather name="shield" size={18} color={COLORS.white} />
-                                <Text style={styles.checkBtnText}>Check Interaction</Text>
-                            </>
-                        }
+                        <LinearGradient
+                            colors={(!drug1 || !drug2 || loading) ? ['#94A3B8', '#94A3B8'] : ['#7C3AED', '#6D28D9']}
+                            style={styles.checkBtn}
+                        >
+                            {loading
+                                ? <ActivityIndicator color="#fff" />
+                                : <>
+                                    <Feather name="shield" size={18} color="#fff" />
+                                    <Text style={styles.checkBtnText}>Check Interaction</Text>
+                                </>
+                            }
+                        </LinearGradient>
                     </TouchableOpacity>
                 </View>
 
@@ -212,67 +214,99 @@ export default function DrugInteractionScreen() {
                 )}
 
                 {/* Results */}
-                {result && (
-                    <View style={styles.resultsSection}>
-                        <SeverityBanner severity={result.severity} />
+                {result && sev && (
+                    <View style={styles.results}>
+
+                        {/* Severity Banner */}
+                        <LinearGradient colors={sev.colors} style={styles.severityBanner}>
+                            <MaterialCommunityIcons name={sev.icon} size={32} color="#fff" />
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.severityLabel}>{sev.label}</Text>
+                                <Text style={styles.severitySub}>{sev.sub}</Text>
+                            </View>
+                        </LinearGradient>
+
+                        {/* Risk meter */}
+                        <View style={styles.riskCard}>
+                            <Text style={styles.riskTitle}>Risk Level</Text>
+                            <View style={styles.riskBar}>
+                                <View style={[styles.riskFill, {
+                                    width: `${sev.barPct}%`,
+                                    backgroundColor: sev.barColor,
+                                }]} />
+                            </View>
+                            <View style={styles.riskLabels}>
+                                <Text style={styles.riskLabelText}>Low</Text>
+                                <Text style={styles.riskLabelText}>Moderate</Text>
+                                <Text style={styles.riskLabelText}>High</Text>
+                            </View>
+                        </View>
+
+                        {/* Drug pair */}
+                        <View style={styles.drugPairCard}>
+                            <View style={styles.drugPairItem}>
+                                <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.drugPairDot} />
+                                <Text style={styles.drugPairName}>{drug1}</Text>
+                            </View>
+                            <View style={styles.drugPairSep}>
+                                <MaterialCommunityIcons name="plus" size={16} color={COLORS.textSecondary} />
+                            </View>
+                            <View style={styles.drugPairItem}>
+                                <LinearGradient colors={['#7C3AED', '#6D28D9']} style={styles.drugPairDot} />
+                                <Text style={styles.drugPairName}>{drug2}</Text>
+                            </View>
+                        </View>
+
+                        {/* FDA verified */}
                         {result.fda_verified && (
                             <View style={styles.fdaBadge}>
-                                <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
-                                <Text style={styles.fdaBadgeText}>Verified against FDA drug label database</Text>
-                            </View>
-                        )}
-                        <View style={styles.resultCard}>
-                            <Text style={styles.resultLabel}>SUMMARY</Text>
-                            <Text style={styles.resultText}>{result.summary}</Text>
-                        </View>
-
-                        <View style={styles.resultCard}>
-                            <Text style={styles.resultLabel}>HOW IT WORKS</Text>
-                            <Text style={styles.resultText}>{result.mechanism}</Text>
-                        </View>
-
-                        {result.whatHappens && result.severity !== 'safe' && (
-                            <View style={[styles.resultCard, { backgroundColor: COLORS.dangerBg, borderColor: '#FECACA' }]}>
-                                <Text style={[styles.resultLabel, { color: COLORS.dangerText }]}>WHAT COULD HAPPEN</Text>
-                                <Text style={[styles.resultText, { color: COLORS.dangerText }]}>{result.whatHappens}</Text>
+                                <Ionicons name="shield-checkmark" size={15} color="#059669" />
+                                <Text style={styles.fdaText}>Verified against FDA drug label database</Text>
                             </View>
                         )}
 
-                        <View style={[styles.resultCard, { backgroundColor: COLORS.successBg, borderColor: COLORS.border }]}>
-                            <Text style={[styles.resultLabel, { color: COLORS.primaryDark }]}>RECOMMENDATION</Text>
-                            <Text style={[styles.resultText, { color: COLORS.primaryDark }]}>{result.recommendation}</Text>
-                        </View>
-
-                        {result.diceyConditions && (
-                            <View style={[styles.resultCard, { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }]}>
-                                <Text style={[styles.resultLabel, { color: '#C2410C' }]}>⚠️ DICEY CASES (CONDITIONAL RISKS)</Text>
-                                <Text style={[styles.resultText, { color: '#9A3412' }]}>{result.diceyConditions}</Text>
+                        {/* Info cards */}
+                        {[
+                            { label: '📋 SUMMARY', value: result.summary, bg: '#fff', textColor: COLORS.textPrimary },
+                            { label: '🔬 HOW IT WORKS', value: result.mechanism, bg: '#fff', textColor: COLORS.textPrimary },
+                            result.whatHappens && result.severity !== 'safe' && { label: '⚠️ WHAT COULD HAPPEN', value: result.whatHappens, bg: COLORS.dangerBg, textColor: COLORS.dangerText },
+                            { label: '✅ RECOMMENDATION', value: result.recommendation, bg: COLORS.successBg, textColor: COLORS.primaryDark },
+                            result.diceyConditions && { label: '🎯 CONDITIONAL RISKS', value: result.diceyConditions, bg: '#FFF7ED', textColor: '#9A3412' },
+                        ].filter(Boolean).map((card, i) => (
+                            <View key={i} style={[styles.infoCard, { backgroundColor: card.bg }]}>
+                                <Text style={[styles.infoLabel, { color: card.textColor }]}>{card.label}</Text>
+                                <Text style={[styles.infoText, { color: card.textColor }]}>{card.value}</Text>
                             </View>
-                        )}
+                        ))}
 
+                        {/* Alternatives */}
                         {result.alternatives?.length > 0 && result.severity !== 'safe' && (
-                            <View style={styles.resultCard}>
-                                <Text style={styles.resultLabel}>CONSIDER ALTERNATIVES</Text>
+                            <View style={styles.infoCard}>
+                                <Text style={styles.infoLabel}>💡 CONSIDER INSTEAD</Text>
                                 {result.alternatives.map((a, i) => (
                                     <View key={i} style={styles.altRow}>
-                                        <MaterialCommunityIcons name="arrow-right" size={14} color={COLORS.primary} />
+                                        <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.altDot} />
                                         <Text style={styles.altText}>{a}</Text>
                                     </View>
                                 ))}
                             </View>
                         )}
 
+                        {/* New check */}
                         <TouchableOpacity
-                            style={styles.newCheckBtn}
                             onPress={() => { setResult(null); setDrug1(''); setDrug2(''); }}
+                            activeOpacity={0.8}
                         >
-                            <Feather name="refresh-cw" size={15} color={COLORS.primary} />
-                            <Text style={styles.newCheckText}>Check another pair</Text>
+                            <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.newCheckBtn}>
+                                <Feather name="refresh-cw" size={15} color="#fff" />
+                                <Text style={styles.newCheckText}>Check Another Pair</Text>
+                            </LinearGradient>
                         </TouchableOpacity>
 
+                        {/* Disclaimer */}
                         <View style={styles.disclaimer}>
-                            <Ionicons name="warning" size={14} color={COLORS.warningText} />
-                            <Text style={styles.disclaimerText}>This is for informational purposes only. Always consult a licensed pharmacist or doctor.</Text>
+                            <Ionicons name="warning-outline" size={13} color={COLORS.warningText} />
+                            <Text style={styles.disclaimerText}>For informational purposes only. Consult a licensed pharmacist or doctor.</Text>
                         </View>
                     </View>
                 )}
@@ -284,96 +318,133 @@ export default function DrugInteractionScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
+
+    header: {
+        flexDirection: 'row', alignItems: 'center', gap: 14,
+        paddingHorizontal: 20, paddingVertical: 18,
+    },
+    headerIcon: { width: 46, height: 46, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+    headerTitle: { fontSize: 17, fontWeight: '800', color: '#fff' },
+    headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+
     content: { padding: 20, paddingBottom: 60 },
-    heroCard: {
-        alignItems: 'center', backgroundColor: COLORS.accentBg, borderRadius: 20,
-        padding: 24, marginBottom: 20, borderWidth: 1, borderColor: '#DDD6FE',
+
+    inputCard: {
+        backgroundColor: '#fff', borderRadius: 22, padding: 18,
+        borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.md, gap: 14, marginBottom: 16,
     },
-    heroIcon: {
-        width: 64, height: 64, borderRadius: 20,
-        backgroundColor: COLORS.white, justifyContent: 'center', alignItems: 'center', marginBottom: 14,
+
+    countryBtn: {
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: COLORS.successBg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+        borderWidth: 1, borderColor: COLORS.border, alignSelf: 'flex-start',
     },
-    heroTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, textAlign: 'center' },
-    heroSub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 21 },
-    inputsCard: {
-        backgroundColor: COLORS.white, borderRadius: 20, padding: 20,
-        marginBottom: 20, borderWidth: 1, borderColor: COLORS.border, gap: 16,
-    },
-    label: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
-    countrySelector: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        backgroundColor: COLORS.lightGray, borderWidth: 1.5, borderColor: COLORS.border,
-        borderRadius: 12, paddingHorizontal: 14, height: 52,
-    },
-    countrySelectorText: { fontSize: 15, color: COLORS.textPrimary, fontWeight: '500' },
+    countryBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, flex: 1 },
     countryDropdown: {
-        marginTop: 4, backgroundColor: COLORS.white, borderRadius: 12,
-        borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden',
+        backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: COLORS.border,
+        overflow: 'hidden', ...SHADOWS.sm,
     },
     countryOption: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+        paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: COLORS.border,
     },
-    countryOptionSelected: { backgroundColor: COLORS.successBg },
+    countryOptionActive: { backgroundColor: COLORS.successBg },
     countryOptionText: { fontSize: 14, color: COLORS.textPrimary },
-    countryOptionTextSelected: { fontWeight: '700', color: COLORS.primary },
-    inputWrapper: {
-        flexDirection: 'row', alignItems: 'center',
-        backgroundColor: COLORS.lightGray, borderWidth: 1.5, borderColor: COLORS.border,
-        borderRadius: 12, paddingHorizontal: 14, height: 52,
+
+    drugsContainer: { gap: 4 },
+    drugInput: {
+        flexDirection: 'row', alignItems: 'center', gap: 12,
+        backgroundColor: COLORS.lightGray, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13,
+        borderWidth: 1.5, borderColor: COLORS.border,
     },
-    inputFocused: { borderColor: COLORS.primary, backgroundColor: COLORS.successBg + '60' },
-    input: { flex: 1, fontSize: 15, color: COLORS.textPrimary },
-    swapRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
+    drugInputFocused: { borderColor: COLORS.primary, backgroundColor: COLORS.successBg },
+    drugPillIcon: { width: 28, height: 28, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+    drugTextInput: { flex: 1, fontSize: 15, color: COLORS.textPrimary, fontWeight: '500' },
+
+    vsDivider: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+    vsDividerLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
     swapBtn: {
-        width: 36, height: 36, borderRadius: 18,
-        backgroundColor: COLORS.lightGray, justifyContent: 'center', alignItems: 'center',
-        borderWidth: 1, borderColor: COLORS.border,
+        width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff',
+        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border,
     },
+
     checkBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-        backgroundColor: COLORS.accent, height: 52, borderRadius: 12, marginTop: 4,
+        height: 52, borderRadius: 14,
     },
-    checkBtnDisabled: { opacity: 0.5 },
-    checkBtnText: { color: COLORS.white, fontSize: 16, fontWeight: '700' },
+    checkBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
     errorBox: {
         flexDirection: 'row', gap: 10, backgroundColor: COLORS.dangerBg,
-        padding: 14, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#FECACA',
+        padding: 14, borderRadius: 14, marginBottom: 16, borderWidth: 1, borderColor: COLORS.dangerBorder,
     },
     errorText: { flex: 1, fontSize: 14, color: COLORS.dangerText },
-    resultsSection: { gap: 12 },
+
+    results: { gap: 12 },
+
     severityBanner: {
-        flexDirection: 'row', alignItems: 'center', gap: 12,
-        padding: 16, borderRadius: 14, borderWidth: 1.5,
+        flexDirection: 'row', alignItems: 'center', gap: 14,
+        padding: 18, borderRadius: 18,
     },
-    severityLabel: { fontSize: 16, fontWeight: '700', flex: 1 },
-    resultCard: {
-        backgroundColor: COLORS.white, borderRadius: 14, padding: 16,
+    severityLabel: { fontSize: 17, fontWeight: '800', color: '#fff' },
+    severitySub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+
+    riskCard: {
+        backgroundColor: '#fff', borderRadius: 16, padding: 16,
         borderWidth: 1, borderColor: COLORS.border,
     },
-    resultLabel: {
-        fontSize: 11, fontWeight: '700', color: COLORS.textSecondary,
-        letterSpacing: 0.5, marginBottom: 8,
-    },
-    resultText: { fontSize: 14, color: COLORS.textPrimary, lineHeight: 21 },
-    altRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-    altText: { fontSize: 14, color: COLORS.textPrimary },
-    newCheckBtn: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-        backgroundColor: COLORS.successBg, paddingVertical: 14, borderRadius: 12,
+    riskTitle: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 10, letterSpacing: 0.5 },
+    riskBar: { height: 10, backgroundColor: COLORS.lightGray, borderRadius: 5, overflow: 'hidden', marginBottom: 6 },
+    riskFill: { height: 10, borderRadius: 5 },
+    riskLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+    riskLabelText: { fontSize: 10, fontWeight: '600', color: COLORS.textMuted },
+
+    drugPairCard: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12,
         borderWidth: 1, borderColor: COLORS.border,
     },
-    newCheckText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-    disclaimer: {
-        flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-        backgroundColor: COLORS.warningBg, padding: 12, borderRadius: 10,
+    drugPairItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    drugPairDot: { width: 10, height: 10, borderRadius: 5 },
+    drugPairName: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary, flex: 1 },
+    drugPairSep: {
+        width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.lightGray,
+        justifyContent: 'center', alignItems: 'center',
     },
-    disclaimerText: { flex: 1, fontSize: 12, color: '#92400E', lineHeight: 18 },
+
     fdaBadge: {
         flexDirection: 'row', alignItems: 'center', gap: 8,
-        backgroundColor: '#DCFCE7', padding: 10, borderRadius: 10,
-        borderWidth: 1, borderColor: '#86EFAC',
+        backgroundColor: '#ECFDF5', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#6EE7B7',
     },
-    fdaBadgeText: { fontSize: 12, color: '#16A34A', fontWeight: '600' },
+    fdaText: { fontSize: 13, fontWeight: '600', color: '#065F46' },
+
+    infoCard: {
+        backgroundColor: '#fff', borderRadius: 16, padding: 16,
+        borderWidth: 1, borderColor: COLORS.border,
+    },
+    infoLabel: {
+        fontSize: 11, fontWeight: '700', letterSpacing: 0.5,
+        marginBottom: 8, color: COLORS.textSecondary,
+    },
+    infoText: { fontSize: 14, lineHeight: 22 },
+
+    altRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+    altDot: { width: 8, height: 8, borderRadius: 4 },
+    altText: { fontSize: 14, color: COLORS.textPrimary, flex: 1 },
+
+    newCheckBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        gap: 8, paddingVertical: 15, borderRadius: 14,
+    },
+    newCheckText: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+    disclaimer: {
+        flexDirection: 'row', gap: 8, backgroundColor: COLORS.warningBg,
+        padding: 12, borderRadius: 12, alignItems: 'flex-start',
+    },
+    disclaimerText: { flex: 1, fontSize: 12, color: '#92400E', lineHeight: 18 },
+
+    emptyState: { alignItems: 'center', paddingTop: 40, marginBottom: 50, gap: 12 },
+    emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
+    emptyText: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 21, paddingHorizontal: 20 },
 });

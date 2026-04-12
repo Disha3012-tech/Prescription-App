@@ -19,7 +19,7 @@ Duration: {duration or 'not specified'}
 Country: {country}
 Currency: {currency}
 
-Provide a complete explanation using your knowledge of this medicine as available in {country}.
+Provide a complete detailed explanation using your knowledge of this medicine as available in {country}.
 
 Return ONLY this JSON. No explanation, no markdown:
 {{

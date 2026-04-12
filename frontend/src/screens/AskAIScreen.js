@@ -2,23 +2,23 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
     View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList,
     SafeAreaView, KeyboardAvoidingView, Platform, ActivityIndicator,
+    Animated, StatusBar,
 } from 'react-native';
-import { COLORS } from '../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, SHADOWS } from '../theme';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { API_URL, COUNTRIES } from '../config';
-import { Picker } from '@react-native-picker/picker';
 
 const SUGGESTIONS = [
-    'What are the side effects of Paracetamol?',
-    'Can I take ibuprofen on an empty stomach?',
-    'What does it mean if my prescription says "SOS"?',
-    'Is it safe to split tablets?',
-    'What does "bd" mean on a prescription?',
-    'How do I store medicines properly?',
+    { icon: '💊', text: 'What are Paracetamol side effects?' },
+    { icon: '🍽️', text: 'Can I take ibuprofen on empty stomach?' },
+    { icon: '📋', text: 'What does "bd" mean on a prescription?' },
+    { icon: '🔄', text: 'Generic vs brand medicines?' },
+    { icon: '💉', text: 'Is it safe to split tablets?' },
+    { icon: '🌡️', text: 'How to store medicines properly?' },
 ];
 
-const SYSTEM_PROMPT = `You are a friendly, knowledgeable medical assistant helping patients in India understand their prescriptions and medicines. 
-
+const SYSTEM_PROMPT = `You are a friendly, knowledgeable medical assistant helping patients understand their prescriptions and medicines. 
 Rules:
 - Explain everything in simple, clear English (10th-grade level)
 - When mentioning Indian brand names, also mention generic equivalents
@@ -28,34 +28,57 @@ Rules:
 - Keep responses concise — 3-4 sentences max unless more detail is clearly needed
 - Use symbols (like •, 💊, ⚠️) and bold text (**important**) to make information scanable`;
 
-const WELCOME_MESSAGE = `Hello! 👋 I’m here to help you understand medicines in simple terms. If you have any questions about:  
+const WELCOME_MESSAGE = `Hey there! 👋 I'm your personal **Health AI**.\n\nAsk me anything about:\n• 💊 **Medicines** — dosage, side effects, interactions\n• 🔄 **Generics** — cheaper alternatives with same effect\n• 📋 **Prescriptions** — decode doctor shorthand\n• 🌡️ **Health tips** — storage, timing, diet\n\n⚠️ *I'm here to inform, not diagnose. Always consult your doctor for medical decisions.*\n\nWhat would you like to know?`;
 
-• **Medicines** (like paracetamol, cetirizine, omeprazole, etc.)  
-• **How to take them** (with/without food, dosage)  
-• **Side effects** (common ones to watch for)  
-• **Generics vs. brands** (cheaper alternatives with the same effect)  
-
-Just ask!  
-
-⚠️ **Disclaimer**: I can’t diagnose or prescribe. Always check with your doctor before starting/stopping any medicine.  
-
-What would you like to know? 😊`;
+const formatText = (text, isUser) => {
+    if (!text) return null;
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, index) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            const content = part.substring(2, part.length - 2);
+            return <Text key={index} style={[styles.boldText, isUser && styles.boldTextUser]}>{content}</Text>;
+        }
+        if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
+            const content = part.substring(1, part.length - 1);
+            return <Text key={index} style={styles.italicText}>{content}</Text>;
+        }
+        return <Text key={index}>{part}</Text>;
+    });
+};
 
 export default function AskAIScreen() {
-    const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
     const [messages, setMessages] = useState([
-        {
-            id: '0', role: 'assistant',
-            content: WELCOME_MESSAGE,
-        },
+        { id: '0', role: 'assistant', content: WELCOME_MESSAGE },
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const flatRef = useRef(null);
+    const inputRef = useRef(null);
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const dot1 = useRef(new Animated.Value(0)).current;
+    const dot2 = useRef(new Animated.Value(0)).current;
+    const dot3 = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+    }, []);
+
+    useEffect(() => {
+        if (loading) {
+            const animDot = (dot, delay) => Animated.loop(
+                Animated.sequence([
+                    Animated.delay(delay),
+                    Animated.timing(dot, { toValue: -6, duration: 300, useNativeDriver: true }),
+                    Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true }),
+                ])
+            ).start();
+            animDot(dot1, 0); animDot(dot2, 150); animDot(dot3, 300);
+        }
+    }, [loading]);
 
     useEffect(() => {
         if (messages.length > 1) {
-            setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+            setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 120);
         }
     }, [messages]);
 
@@ -69,34 +92,30 @@ export default function AskAIScreen() {
         setLoading(true);
 
         try {
-            // Build conversation history for context (last 10 messages)
             const history = [...messages.slice(-9), userMsg]
-                .filter(m => m.role !== 'assistant' || m.id !== '0') // exclude welcome
+                .filter(m => m.role !== 'assistant' || m.id !== '0')
                 .map(m => ({ role: m.role, content: m.content }));
 
             const response = await fetch(`${API_URL}chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    messages: history,
-                    country: selectedCountry.value 
-                }),
+                body: JSON.stringify({ messages: history }),
             });
 
             const data = await response.json();
             if (data.status !== 'success') throw new Error(data.detail || 'Chat error');
 
-            const assistantMsg = {
+            setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
                 content: data.content,
-            };
-            setMessages(prev => [...prev, assistantMsg]);
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            }]);
         } catch (e) {
             setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: "Sorry, I couldn't connect right now. Please check your internet connection and try again.",
+                content: "Connection issue — please check your internet and try again.",
                 isError: true,
             }]);
         } finally {
@@ -104,87 +123,70 @@ export default function AskAIScreen() {
         }
     };
 
-    const renderMessage = ({ item }) => {
+    const clearChat = () => setMessages([{ id: '0', role: 'assistant', content: WELCOME_MESSAGE }]);
+
+    const renderMessage = ({ item, index }) => {
         const isUser = item.role === 'user';
-
-        // Simple formatter for bold text
-        const formatText = (text) => {
-            if (!text) return null;
-            const parts = text.split(/(\*\*.*?\*\*)/g);
-            return parts.map((part, index) => {
-                if (part.startsWith('**') && part.endsWith('**')) {
-                    const content = part.substring(2, part.length - 2);
-                    return (
-                        <Text key={index} style={[styles.boldText, isUser && styles.bubbleTextUser]}>
-                            {content}
-                        </Text>
-                    );
-                }
-                return part;
-            });
-        };
-
         return (
-            <View style={[styles.msgRow, isUser && styles.msgRowUser]}>
+            <Animated.View style={[
+                styles.msgRow,
+                isUser && styles.msgRowUser,
+                { opacity: fadeAnim },
+            ]}>
                 {!isUser && (
-                    <View style={styles.aiAvatar}>
-                        <MaterialCommunityIcons name="robot-outline" size={16} color={COLORS.primary} />
-                    </View>
+                    <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.aiAvatar}>
+                        <MaterialCommunityIcons name="robot-outline" size={14} color="#fff" />
+                    </LinearGradient>
                 )}
-                <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI, item.isError && styles.bubbleError]}>
+                <View style={[
+                    styles.bubble,
+                    isUser ? styles.bubbleUser : styles.bubbleAI,
+                    item.isError && styles.bubbleError,
+                ]}>
                     <Text style={[styles.bubbleText, isUser && styles.bubbleTextUser]}>
-                        {formatText(item.content)}
+                        {formatText(item.content, isUser)}
                     </Text>
+                    {item.timestamp && !isUser && (
+                        <Text style={styles.bubbleTime}>{item.timestamp}</Text>
+                    )}
                 </View>
-            </View>
+            </Animated.View>
         );
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={80}>
+            <StatusBar barStyle="light-content" />
 
-                {/* Header */}
-                <View style={styles.header}>
-                    <View style={styles.headerLeft}>
-                        <View style={styles.headerAvatar}>
-                            <MaterialCommunityIcons name="robot-outline" size={22} color={COLORS.white} />
+            {/* Header */}
+            <LinearGradient colors={['#0A1628', '#0F2535']} style={styles.header}>
+                <View style={styles.headerLeft}>
+                    <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.headerAvatar}>
+                        <MaterialCommunityIcons name="robot-outline" size={20} color="#fff" />
+                    </LinearGradient>
+                    <View>
+                        <Text style={styles.headerName}>Health Assistant</Text>
+                        <View style={styles.onlineRow}>
+                            <Animated.View style={[styles.onlineDot, {
+                                transform: [{ scale: dot1 }],
+                                opacity: loading ? dot1.interpolate({ inputRange: [-6, 0], outputRange: [1, 0.4] }) : 1,
+                            }]} />
+                            <Text style={styles.onlineText}>
+                                {loading ? 'Thinking...' : 'AI · Online'}
+                            </Text>
                         </View>
-                        <View>
-                            <Text style={styles.headerName}>Health Assistant</Text>
-                            <View style={styles.onlineRow}>
-                                <View style={styles.onlineDot} />
-                                <Text style={styles.onlineText}>AI-powered · Online</Text>
-                            </View>
-                        </View>
-                    </View>
-                    
-                    <View style={styles.headerRight}>
-                        <View style={styles.countryPickerWrap}>
-                            <Picker
-                                selectedValue={selectedCountry.value}
-                                onValueChange={(val) => setSelectedCountry(COUNTRIES.find(c => c.value === val))}
-                                style={styles.miniPicker}
-                                dropdownIconColor={COLORS.primary}
-                            >
-                                {COUNTRIES.map(c => (
-                                    <Picker.Item key={c.value} label={c.label.split(' ')[0]} value={c.value} />
-                                ))}
-                            </Picker>
-                        </View>
-
-                        <TouchableOpacity
-                            style={styles.clearBtn}
-                            onPress={() => setMessages([{
-                                id: '0', role: 'assistant',
-                                content: WELCOME_MESSAGE,
-                            }])}
-                        >
-                            <Feather name="trash-2" size={16} color={COLORS.textSecondary} />
-                        </TouchableOpacity>
                     </View>
                 </View>
+                <TouchableOpacity style={styles.clearBtn} onPress={clearChat}>
+                    <Feather name="refresh-cw" size={16} color="rgba(255,255,255,0.7)" />
+                </TouchableOpacity>
+            </LinearGradient>
 
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+                keyboardVerticalOffset={0}
+            >
                 {/* Messages */}
                 <FlatList
                     ref={flatRef}
@@ -195,30 +197,32 @@ export default function AskAIScreen() {
                     showsVerticalScrollIndicator={false}
                     ListFooterComponent={loading ? (
                         <View style={styles.typingRow}>
-                            <View style={styles.aiAvatar}>
-                                <MaterialCommunityIcons name="robot-outline" size={16} color={COLORS.primary} />
-                            </View>
+                            <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.aiAvatar}>
+                                <MaterialCommunityIcons name="robot-outline" size={14} color="#fff" />
+                            </LinearGradient>
                             <View style={styles.typingBubble}>
-                                <ActivityIndicator size="small" color={COLORS.primary} />
-                                <Text style={styles.typingText}>Thinking...</Text>
+                                <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot1 }] }]} />
+                                <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot2 }] }]} />
+                                <Animated.View style={[styles.typingDot, { transform: [{ translateY: dot3 }] }]} />
                             </View>
                         </View>
                     ) : null}
                 />
 
-                {/* Suggestions (shown only at start) */}
+                {/* Suggestions */}
                 {messages.length <= 1 && (
                     <View style={styles.suggestionsWrapper}>
-                        <Text style={styles.suggestLabel}>Suggested questions</Text>
+                        <Text style={styles.suggestLabel}>✨ Suggested</Text>
                         <FlatList
                             data={SUGGESTIONS}
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             keyExtractor={(_, i) => i.toString()}
-                            contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingBottom: 8 }}
+                            contentContainerStyle={styles.suggList}
                             renderItem={({ item }) => (
-                                <TouchableOpacity style={styles.suggChip} onPress={() => sendMessage(item)}>
-                                    <Text style={styles.suggChipText}>{item}</Text>
+                                <TouchableOpacity style={styles.suggChip} onPress={() => sendMessage(item.text)}>
+                                    <Text style={styles.suggEmoji}>{item.icon}</Text>
+                                    <Text style={styles.suggText}>{item.text}</Text>
                                 </TouchableOpacity>
                             )}
                         />
@@ -227,27 +231,39 @@ export default function AskAIScreen() {
 
                 {/* Disclaimer */}
                 <View style={styles.disclaimer}>
-                    <Ionicons name="information-circle-outline" size={13} color={COLORS.textSecondary} />
+                    <Ionicons name="information-circle-outline" size={12} color={COLORS.textMuted} />
                     <Text style={styles.disclaimerText}>Not a substitute for professional medical advice.</Text>
                 </View>
 
-                {/* Input bar */}
+                {/* Input */}
                 <View style={styles.inputBar}>
-                    <TextInput
-                        style={styles.textInput}
-                        placeholder="Ask about any medicine or prescription..."
-                        placeholderTextColor={COLORS.textSecondary + '80'}
-                        value={input}
-                        onChangeText={setInput}
-                        multiline
-                        maxLength={500}
-                    />
+                    <View style={styles.inputWrapper}>
+                        <TextInput
+                            ref={inputRef}
+                            style={styles.textInput}
+                            placeholder="Ask about any medicine..."
+                            placeholderTextColor={COLORS.textMuted}
+                            value={input}
+                            onChangeText={setInput}
+                            multiline
+                            maxLength={500}
+                            onSubmitEditing={() => sendMessage()}
+                        />
+                    </View>
                     <TouchableOpacity
                         style={[styles.sendBtn, (!input.trim() || loading) && styles.sendBtnDisabled]}
                         onPress={() => sendMessage()}
                         disabled={!input.trim() || loading}
                     >
-                        <Feather name="send" size={18} color={COLORS.white} />
+                        <LinearGradient
+                            colors={(!input.trim() || loading) ? ['#94A3B8', '#94A3B8'] : ['#0D9488', '#0891B2']}
+                            style={styles.sendGradient}
+                        >
+                            {loading
+                                ? <ActivityIndicator size="small" color="#fff" />
+                                : <Feather name="send" size={16} color="#fff" />
+                            }
+                        </LinearGradient>
                     </TouchableOpacity>
                 </View>
             </KeyboardAvoidingView>
@@ -256,97 +272,96 @@ export default function AskAIScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
+    container: { flex: 1, backgroundColor: '#F7FFFD' },
+
     header: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: 16, paddingVertical: 14,
-        backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border,
+        paddingHorizontal: 20, paddingVertical: 14,
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    headerAvatar: {
-        width: 40, height: 40, borderRadius: 20,
-        backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center',
-    },
-    headerName: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
-    onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-    onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22C55E' },
-    onlineText: { fontSize: 12, color: COLORS.textSecondary },
-    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    countryPickerWrap: {
-        backgroundColor: COLORS.lightGray,
-        borderRadius: 12,
-        height: 36,
-        width: 70,
-        justifyContent: 'center',
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: COLORS.border,
-    },
-    miniPicker: {
-        height: 36,
-        width: 100, // wider than wrap to hide arrow/padding if needed
-        color: COLORS.textPrimary,
-    },
+    headerAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+    headerName: { fontSize: 16, fontWeight: '800', color: '#fff' },
+    onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+    onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#34D399' },
+    onlineText: { fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: '500' },
     clearBtn: {
-        width: 36, height: 36, borderRadius: 18,
-        backgroundColor: COLORS.lightGray, justifyContent: 'center', alignItems: 'center',
+        width: 38, height: 38, borderRadius: 19,
+        backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
     },
-    messagesList: { padding: 16, gap: 12 },
-    msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, maxWidth: '85%' },
+
+    messagesList: { paddingHorizontal: 16, paddingVertical: 16, gap: 12 },
+
+    msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, maxWidth: '88%' },
     msgRowUser: { alignSelf: 'flex-end', flexDirection: 'row-reverse' },
+
     aiAvatar: {
-        width: 30, height: 30, borderRadius: 15, flexShrink: 0,
-        backgroundColor: COLORS.successBg, justifyContent: 'center', alignItems: 'center',
-        borderWidth: 1, borderColor: COLORS.border,
+        width: 30, height: 30, borderRadius: 15,
+        justifyContent: 'center', alignItems: 'center', flexShrink: 0,
     },
+
     bubble: {
-        paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, flexShrink: 1,
+        paddingHorizontal: 14, paddingVertical: 11, borderRadius: 20, flexShrink: 1,
+        ...SHADOWS.sm,
     },
     bubbleAI: {
-        backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.border,
-        borderBottomLeftRadius: 4,
+        backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border,
+        borderBottomLeftRadius: 5,
     },
-    bubbleUser: { backgroundColor: COLORS.primary, borderBottomRightRadius: 4 },
-    bubbleError: { backgroundColor: COLORS.dangerBg, borderColor: '#FECACA' },
+    bubbleUser: {
+        borderBottomRightRadius: 5,
+        backgroundColor: COLORS.primary,
+    },
+    bubbleError: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
     bubbleText: { fontSize: 15, color: COLORS.textPrimary, lineHeight: 22 },
-    bubbleTextUser: { color: COLORS.white },
-    boldText: { fontWeight: 'bold', color: COLORS.textPrimary },
-    typingRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 4 },
+    bubbleTextUser: { color: '#fff' },
+    bubbleTime: { fontSize: 10, color: COLORS.textMuted, marginTop: 6, alignSelf: 'flex-end' },
+    boldText: { fontWeight: '800', color: COLORS.textPrimary },
+    boldTextUser: { color: '#fff' },
+    italicText: { fontStyle: 'italic', color: COLORS.textSecondary },
+
+    typingRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 4, paddingHorizontal: 16 },
     typingBubble: {
-        flexDirection: 'row', alignItems: 'center', gap: 8,
-        backgroundColor: COLORS.white, paddingHorizontal: 14, paddingVertical: 10,
-        borderRadius: 18, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: COLORS.border,
+        flexDirection: 'row', alignItems: 'center', gap: 5,
+        backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 14,
+        borderRadius: 20, borderBottomLeftRadius: 5, borderWidth: 1, borderColor: COLORS.border,
     },
-    typingText: { fontSize: 13, color: COLORS.textSecondary },
+    typingDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: COLORS.primaryLight },
+
     suggestionsWrapper: { paddingTop: 8 },
     suggestLabel: {
-        fontSize: 12, fontWeight: '600', color: COLORS.textSecondary,
-        paddingHorizontal: 16, marginBottom: 8,
+        fontSize: 11, fontWeight: '700', color: COLORS.textSecondary,
+        paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.4,
     },
+    suggList: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
     suggChip: {
-        backgroundColor: COLORS.white, paddingHorizontal: 14, paddingVertical: 10,
-        borderRadius: 20, borderWidth: 1, borderColor: COLORS.border, maxWidth: 200,
+        flexDirection: 'row', alignItems: 'center', gap: 7,
+        backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 10,
+        borderRadius: 22, borderWidth: 1, borderColor: COLORS.border, maxWidth: 220,
+        ...SHADOWS.sm,
     },
-    suggChipText: { fontSize: 13, color: COLORS.textPrimary },
+    suggEmoji: { fontSize: 14 },
+    suggText: { fontSize: 13, color: COLORS.textPrimary, fontWeight: '500', flexShrink: 1 },
+
     disclaimer: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
-        paddingHorizontal: 16, paddingVertical: 4,
+        paddingHorizontal: 16, paddingVertical: 5,
     },
-    disclaimerText: { fontSize: 11, color: COLORS.textSecondary },
+    disclaimerText: { fontSize: 10, color: COLORS.textMuted },
+
     inputBar: {
         flexDirection: 'row', alignItems: 'flex-end', gap: 10,
-        paddingHorizontal: 16, paddingVertical: 12,
-        backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border,
+        paddingHorizontal: 16, paddingVertical: 12, paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+        backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: COLORS.border,
+    },
+    inputWrapper: {
+        flex: 1, backgroundColor: COLORS.lightGray, borderRadius: 22,
+        borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 16, paddingVertical: 10,
     },
     textInput: {
-        flex: 1, fontSize: 15, color: COLORS.textPrimary,
-        backgroundColor: COLORS.lightGray, borderRadius: 20,
-        paddingHorizontal: 16, paddingVertical: 10, maxHeight: 100,
-        borderWidth: 1, borderColor: COLORS.border,
+        fontSize: 15, color: COLORS.textPrimary, maxHeight: 100, lineHeight: 21,
     },
-    sendBtn: {
-        width: 44, height: 44, borderRadius: 22,
-        backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center',
-    },
-    sendBtnDisabled: { opacity: 0.4 },
+    sendBtn: { flexShrink: 0 },
+    sendGradient: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
+    sendBtnDisabled: { opacity: 0.6 },
 });

@@ -16,10 +16,16 @@ import DrugInteractionScreen from './src/screens/DrugInteractionScreen';
 import DoseTrackerScreen from './src/screens/DoseTrackerScreen';
 import AskAIScreen from './src/screens/AskAIScreen';
 import MedicalHistoryScreen from './src/screens/MedicalHistoryScreen';
-import PharmacyScreen from './src/screens/PharmacyScreen'; // your existing one
+import PharmacyScreen from './src/screens/PharmacyScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ConfirmMedicinesScreen from './src/screens/ConfirmMedicinesScreen';
 import PrescriptionDetailScreen from './src/screens/PrescriptionDetailScreen';
+import PrescriptionTimelineScreen from './src/screens/PrescriptionTimelineScreen';
+import FamilyProfileScreen from './src/screens/FamilyProfileScreen';
+import MedicineExplainerScreen from './src/screens/MedicineExplainerScreen';
+import RefillReminderScreen from './src/screens/RefillReminderScreen';
+import SymptomLookupScreen from './src/screens/SymptomLookupScreen';
+
 // ─── Bottom tab config ──────────────────────────────────────────────────────
 const TABS = [
   {
@@ -51,7 +57,7 @@ const TABS = [
 
 // Screen name → tab header title mapping
 const SCREEN_TITLES = {
-  DASHBOARD: null, // no header - dashboard has its own
+  DASHBOARD: null,
   SCANNER: 'Scan Prescription',
   DRUG_INTERACTION: 'Drug Interaction',
   DOSE_TRACKER: 'Dose Tracker',
@@ -61,6 +67,11 @@ const SCREEN_TITLES = {
   PROFILE: 'Profile Settings',
   CONFIRM_MEDICINES: 'Confirm Scan',
   PRESCRIPTION_DETAIL: 'Prescription Details',
+  PRESCRIPTION_TIMELINE: 'Prescription Timeline',
+  FAMILY_PROFILE: 'Family Profiles',
+  MEDICINE_EXPLAINER: 'Medicine Guide',
+  REFILL_REMINDER: 'Refill Reminders',
+  SYMPTOM_LOOKUP: 'Symptom Lookup',
 };
 
 // Screens that show the bottom tab bar
@@ -68,6 +79,9 @@ const TAB_SCREENS = new Set(['DASHBOARD', 'SCANNER', 'DRUG_INTERACTION', 'DOSE_T
 
 // Screens that need the shared header
 const NEEDS_HEADER = new Set(['HISTORY', 'PHARMACY', 'PROFILE', 'CONFIRM_MEDICINES', 'PRESCRIPTION_DETAIL']);
+
+// Screens that manage their own full header (no shared back header)
+const SELF_HEADER = new Set(['PRESCRIPTION_TIMELINE', 'FAMILY_PROFILE', 'MEDICINE_EXPLAINER', 'REFILL_REMINDER', 'SYMPTOM_LOOKUP']);
 
 export default function App() {
   const [screen, setScreen] = useState('LANDING');
@@ -90,22 +104,28 @@ export default function App() {
       case 'ONBOARDING': return <OnboardingScreen navigate={navigate} />;
       case 'LOGIN': return <LoginScreen navigate={navigate} setUser={handleSetUser} />;
       case 'SIGNUP': return <SignupScreen navigate={navigate} setUser={handleSetUser} />;
-      case 'DASHBOARD': return <DashboardScreen user={user} navigate={navigate} />;
+      case 'DASHBOARD': return <DashboardScreen user={user} navigate={navigate} currentScreen={screen} />;
       case 'SCANNER': return <ScannerScreen navigate={navigate} user={user} route={{ params: routeParams }} />;
       case 'DRUG_INTERACTION': return <DrugInteractionScreen navigate={navigate} />;
-      case 'DOSE_TRACKER': return <DoseTrackerScreen user={user} navigate={navigate} />;
+      case 'DOSE_TRACKER': return <DoseTrackerScreen user={user} navigate={navigate} currentScreen={screen} />;
       case 'ASK_AI': return <AskAIScreen navigate={navigate} />;
       case 'HISTORY': return <MedicalHistoryScreen user={user} navigate={navigate} />;
       case 'PHARMACY': return <PharmacyScreen navigate={navigate} />;
       case 'PROFILE': return <ProfileScreen user={user} setUser={handleSetUser} navigate={navigate} />;
       case 'CONFIRM_MEDICINES': return <ConfirmMedicinesScreen route={{ params: routeParams }} navigation={{ navigate }} />;
       case 'PRESCRIPTION_DETAIL': return <PrescriptionDetailScreen route={{ params: routeParams }} navigation={{ navigate }} />;
+      case 'PRESCRIPTION_TIMELINE': return <PrescriptionTimelineScreen user={user} navigate={navigate} />;
+      case 'FAMILY_PROFILE': return <FamilyProfileScreen user={user} navigate={navigate} />;
+      case 'MEDICINE_EXPLAINER': return <MedicineExplainerScreen navigate={navigate} user={user} medicines={routeParams.medicines} />;
+      case 'REFILL_REMINDER': return <RefillReminderScreen user={user} navigate={navigate} />;
+      case 'SYMPTOM_LOOKUP': return <SymptomLookupScreen navigate={navigate} user={user} />;
       default: return <LandingScreen navigate={navigate} />;
     }
   };
 
   const showTabs = TAB_SCREENS.has(screen);
   const showHeader = NEEDS_HEADER.has(screen);
+  const isSelfHeader = SELF_HEADER.has(screen);
   const title = SCREEN_TITLES[screen];
 
   return (
@@ -147,7 +167,7 @@ export default function App() {
                   <Text style={[
                     styles.tabLabel,
                     active && styles.tabLabelActive,
-                    tab.center && { marginTop: -6 } // Pull text closer to floating icon
+                    tab.center && { marginTop: -6 }
                   ]}>
                     {tab.label}
                   </Text>
@@ -163,7 +183,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.background },
-  // Header for sub-pages
   headerSafe: { backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   pageHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -174,7 +193,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightGray, justifyContent: 'center', alignItems: 'center',
   },
   pageTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textPrimary },
-  // Tab bar
   tabBarSafe: { backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border },
   tabBar: {
     flexDirection: 'row', alignItems: 'center', height: 60,

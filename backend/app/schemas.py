@@ -44,6 +44,7 @@ class PrescriptionHistoryItem(BaseModel):
     results: List[dict]
     country: str
     currency: str
+    image_url: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -57,9 +58,6 @@ class MedicationTimeBase(BaseModel):
     taken: bool = False
     icon: str
 
-class MedicationTimeCreate(MedicationTimeBase):
-    pass
-
 class MedicationTimeResponse(MedicationTimeBase):
     id: str
     medication_id: str
@@ -72,12 +70,21 @@ class MedicationBase(BaseModel):
     color: str
     color_bg: str
 
-class MedicationCreate(MedicationBase):
-    times: List[MedicationTimeCreate]
+class MedicationTimeCreate(BaseModel):
+    label: str
+    time: str
+    icon: Optional[str] = None
+
+class MedicationCreate(BaseModel):
+    user_id: str
+    name: str
+    dose: str
+    times: Optional[List[MedicationTimeCreate]] = None
 
 class MedicationResponse(MedicationBase):
     id: str
     user_id: str
+    prescription_id: Optional[str] = None
     times: List[MedicationTimeResponse]
     class Config:
         from_attributes = True

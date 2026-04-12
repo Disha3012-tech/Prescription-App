@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import models, schemas
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/medications", tags=["Medications"])
 
@@ -11,13 +12,128 @@ async def get_medications(user_id: str, db: Session = Depends(get_db)):
     meds = db.query(models.Medication).filter(models.Medication.user_id == user_id).all()
     return meds
 
-@router.put("/{medication_id}/times/{time_id}/toggle", response_model=schemas.MedicationTimeResponse)
-async def toggle_time(medication_id: str, time_id: str, db: Session = Depends(get_db)):
-    db_time = db.query(models.MedicationTime).filter(models.MedicationTime.id == time_id, models.MedicationTime.medication_id == medication_id).first()
-    if not db_time:
-        raise HTTPException(status_code=404, detail="Medication time not found")
-    
-    db_time.taken = not db_time.taken
+@router.post("", response_model=schemas.MedicationResponse)
+async def create_medication(req: schemas.MedicationCreate, db: Session = Depends(get_db)):
+    # Simple color assignment for manual entry
+    colors = [
+        {"color": "#3B82F6", "bg": "#DBEAFE"},
+        {"color": "#D97706", "bg": "#FEF3C7"},
+        {"color": "#8B5CF6", "bg": "#EDE9FE"},
+        {"color": "#10B981", "bg": "#D1FAE5"}
+    ]
+    import random
+    c = random.choice(colors)
+
+    new_med = models.Medication(
+        user_id=req.user_id,
+        name=req.name,
+        dose=req.dose,
+        color=c["color"],
+        color_bg=c["bg"]
+    )
+    db.add(new_med)
     db.commit()
-    db.refresh(db_time)
-    return db_time
+    db.refresh(new_med)
+
+    # Add default or requested times
+    if req.times:
+        for t in req.times:
+            db_time = models.MedicationTime(
+                medication_id=new_med.id,
+                label=t.label,
+                time=t.time,
+                icon=t.icon or "weather-sunny"
+            )
+            db.add(db_time)
+    else:
+        # Default: Morning and Evening
+        t1 = models.MedicationTime(medication_id=new_med.id, label="Morning", time="8:00 AM", taken=False, icon="weather-sunny")
+        t2 = models.MedicationTime(medication_id=new_med.id, label="Evening", time="8:00 PM", taken=False, icon="weather-sunset")
+        db.add_all([t1, t2])
+    
+    db.commit()
+    db.refresh(new_med)
+    return new_med
+
+@router.delete("/{medication_id}")
+async def delete_medication(medication_id: str, db: Session = Depends(get_db)):
+    med = db.query(models.Medication).filter(models.Medication.id == medication_id).first()
+    if not med:
+        raise HTTPException(status_code=404, detail="Medication not found")
+    db.delete(med)
+    db.commit()
+    return {"status": "success"}
+
+# ─── Refill Tracking ─────────────────────────────────────────────────────────
+
+class RefillUpdateRequest(BaseModel):
+    remaining_quantity: Optional[float] = None
+    is_refill_reminder_on: Optional[bool] = None
+    refill_threshold: Optional[float] = None
+    total_quantity: Optional[float] = None
+
+@router.put("/{medication_id}/refill")
+async def update_refill(medication_id: str, req: RefillUpdateRequest, db: Session = Depends(get_db)):
+    med = db.query(models.Medication).filter(models.Medication.id == medication_id).first()
+    if not med:
+        raise HTTPException(status_code=404, detail="Medication not found")
+    
+    if req.remaining_quantity is not None:
+        med.remaining_quantity = req.remaining_quantity
+    if req.is_refill_reminder_on is not None:
+        med.is_refill_reminder_on = req.is_refill_reminder_on
+    if req.refill_threshold is not None:
+        med.refill_threshold = req.refill_threshold
+    if req.total_quantity is not None:
+        med.total_quantity = req.total_quantity
+    
+    db.commit()
+    return {"status": "success"}
+
+@router.get("/needs-refill")
+async def get_needs_refill(user_id: str, db: Session = Depends(get_db)):
+    """Returns medications where remaining_quantity <= refill_threshold"""
+    meds = db.query(models.Medication).filter(
+        models.Medication.user_id == user_id,
+        models.Medication.is_refill_reminder_on == True,
+    ).all()
+    needs_refill = [m for m in meds if (m.remaining_quantity or 30) <= (m.refill_threshold or 5)]
+    return {"count": len(needs_refill), "medications": [{"id": m.id, "name": m.name, "remaining": m.remaining_quantity} for m in needs_refill]}
+
+# ─── Medicine Explainer ───────────────────────────────────────────────────────
+
+@router.get("/{medication_id}/explain")
+async def explain_medication(medication_id: str, country: str = "India", currency: str = "INR", db: Session = Depends(get_db)):
+    """Use AI to explain a specific medication in the user's language/country context"""
+    med = db.query(models.Medication).filter(models.Medication.id == medication_id).first()
+    if not med:
+        raise HTTPException(status_code=404, detail="Medication not found")
+    
+    try:
+        from ..explain import explain_medicine
+        result = explain_medicine(
+            {"name": med.name, "dosage": med.dose},
+            country=country,
+            currency=currency
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Times toggle ─────────────────────────────────────────────────────────────
+
+@router.put("/{medication_id}/times/{time_id}/toggle")
+async def toggle_time(medication_id: str, time_id: str, db: Session = Depends(get_db)):
+    time_entry = db.query(models.MedicationTime).filter(models.MedicationTime.id == time_id).first()
+    if not time_entry:
+        raise HTTPException(status_code=404, detail="Time entry not found")
+    time_entry.taken = not time_entry.taken
+    
+    # Decrement remaining quantity when a dose is taken
+    if time_entry.taken:
+        med = db.query(models.Medication).filter(models.Medication.id == medication_id).first()
+        if med and med.remaining_quantity is not None and med.remaining_quantity > 0:
+            med.remaining_quantity = max(0, med.remaining_quantity - 1)
+    
+    db.commit()
+    return {"status": "success", "taken": time_entry.taken}

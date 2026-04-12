@@ -6,6 +6,7 @@ import uuid
 import shutil
 import os
 import json
+import hashlib
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
@@ -37,6 +38,8 @@ from app import models
 from app.routers.auth import router as auth_router
 from app.routers.prescriptions import router as presc_router
 from app.routers.medications import router as medications_router
+from app.routers.symptoms import router as symptoms_router
+from app.routers.family import router as family_router
 
 app = FastAPI(title="Prescription Analyzer API")
 
@@ -59,6 +62,8 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(presc_router)
 app.include_router(medications_router)
+app.include_router(symptoms_router)
+app.include_router(family_router)
 
 # ─── Endpoints ────────────────────────────────────────────────────────────
 
@@ -175,8 +180,34 @@ async def analyze(
     file_path = f"{UPLOAD_FOLDER}/{uuid.uuid4()}.{ext}"
 
     try:
+        content = await file.read()
+        image_hash = hashlib.md5(content).hexdigest()
+        await file.seek(0)
+
+        # Check for existing prescription with same hash for this user
+        if user_id:
+            existing = db.query(models.Prescription).filter(
+                models.Prescription.user_id == user_id,
+                models.Prescription.image_hash == image_hash
+            ).first()
+            
+            if existing:
+                print(f"[DUPLICATE DETECTED]: Returning existing analysis for hash {image_hash}")
+                return {
+                    "status": "success",
+                    "is_duplicate": True,
+                    "existing_id": existing.id,
+                    "raw_text": existing.raw_text,
+                    "avg_confidence": existing.avg_confidence,
+                    "results": json.loads(existing.results_json),
+                    "image_url": existing.image_url,
+                    "country": existing.country,
+                    "currency": existing.currency,
+                    "medicine_highlights": [] # Not stored in DB currently, but we can skip highlighting if it's already confirmed
+                }
+
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(content)
 
         # 1. OCR
         ocr_data = extract_text(file_path)
@@ -220,7 +251,8 @@ async def analyze(
             "country": country,
             "currency": currency,
             "results": structured,
-            "image_url": f"/uploads/{file_path.split('/')[-1]}"
+            "image_url": f"/uploads/{file_path.split('/')[-1]}",
+            "image_hash": image_hash
         }
 
     except Exception as e:
@@ -265,6 +297,8 @@ class ConfirmRequest(BaseModel):
     raw_text: Optional[str] = ""
     avg_confidence: Optional[float] = 0.0
     image_url: Optional[str] = None
+    image_hash: Optional[str] = None
+    prescription_id: Optional[str] = None
 
 @app.post("/confirm-medicines")
 async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
@@ -278,18 +312,32 @@ async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
         results.append(explanation)
 
     if req.user_id and results:
-        new_record = models.Prescription(
-            user_id=req.user_id,
-            date=datetime.utcnow(),
-            raw_text=req.raw_text,
-            avg_confidence=req.avg_confidence,
-            results_json=json.dumps(results),
-            country=req.country,
-            currency=req.currency,
-            image_url=req.image_url
-        )
-        db.add(new_record)
+        if req.prescription_id:
+            new_record = db.query(models.Prescription).filter(models.Prescription.id == req.prescription_id).first()
+            if new_record:
+                new_record.results_json = json.dumps(results)
+                new_record.raw_text = req.raw_text
+                new_record.avg_confidence = req.avg_confidence
+                if req.image_url:
+                    new_record.image_url = req.image_url
+                db.query(models.Medication).filter(models.Medication.prescription_id == req.prescription_id).delete()
+            else:
+                return {"status": "error", "message": "Record not found"}
+        else:
+            new_record = models.Prescription(
+                user_id=req.user_id,
+                date=datetime.utcnow(),
+                raw_text=req.raw_text,
+                avg_confidence=req.avg_confidence,
+                results_json=json.dumps(results),
+                country=req.country,
+                currency=req.currency,
+                image_url=req.image_url,
+                image_hash=req.image_hash
+            )
+            db.add(new_record)
         db.commit()
+        db.refresh(new_record)
 
         colors = [
             {"color": "#3B82F6", "bg": "#DBEAFE"},
@@ -301,6 +349,7 @@ async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
             c = colors[idx % len(colors)]
             new_med = models.Medication(
                 user_id=req.user_id,
+                prescription_id=new_record.id,
                 name=r.get("medicine", "Unknown"),
                 dose=r.get("dosage", "Standard dose"),
                 color=c["color"],
@@ -314,7 +363,13 @@ async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
             db.add_all([t1, t2])
             db.commit()
 
-    return {"status": "success", "results": results}
+    return {
+        "status": "success", 
+        "results": results,
+        "country": req.country,
+        "currency": req.currency,
+        "avg_confidence": req.avg_confidence
+    }
 
 @app.get("/health")
 def health():

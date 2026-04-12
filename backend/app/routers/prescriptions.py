@@ -22,9 +22,40 @@ async def get_history(user_id: str, db: Session = Depends(get_db)):
             "avg_confidence": row.avg_confidence,
             "results": json.loads(row.results_json),
             "country": row.country,
-            "currency": row.currency
+            "currency": row.currency,
+            "image_url": row.image_url
         })
     return {"status": "success", "history": history}
+
+class ManualPrescriptionRequest(BaseModel):
+    user_id: str
+    condition: str
+    doctor: Optional[str] = "Unknown Doctor"
+    notes: Optional[str] = ""
+
+@router.post("/manual")
+async def create_manual_prescription(req: ManualPrescriptionRequest, db: Session = Depends(get_db)):
+    from datetime import datetime
+    new_record = models.Prescription(
+        user_id=req.user_id,
+        date=datetime.utcnow(),
+        raw_text=req.notes,
+        avg_confidence=1.0, 
+        results_json=json.dumps([{
+            "medicine": "Checkup",
+            "explanation": {
+                "brand_name": req.doctor,
+                "medicine_class": req.condition,
+                "what_it_does": req.notes
+            }
+        }]),
+        country="Manual",
+        currency="N/A"
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+    return {"status": "success", "id": new_record.id}
 
 
 class EditPrescriptionRequest(BaseModel):
@@ -43,14 +74,7 @@ async def update_prescription(prescription_id: str, req: EditPrescriptionRequest
     
     # 2. Sync Medications (dose tracker)
     # Delete old medications tied to this scan
-    for old_med in old_results:
-        med_name = old_med.get("medicine") or old_med.get("name", "Unknown")
-        db_med = db.query(models.Medication).filter(
-            models.Medication.user_id == record.user_id,
-            models.Medication.name == med_name
-        ).first()
-        if db_med:
-            db.delete(db_med)
+    db.query(models.Medication).filter(models.Medication.prescription_id == prescription_id).delete()
             
     # Add newly edited medications
     colors = [
@@ -66,6 +90,7 @@ async def update_prescription(prescription_id: str, req: EditPrescriptionRequest
         
         nm = models.Medication(
             user_id=record.user_id,
+            prescription_id=prescription_id,
             name=med_name,
             dose=med_dose,
             color=c["color"],
@@ -89,15 +114,7 @@ async def delete_prescription(prescription_id: str, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="Not found")
     
     # Also delete associated tracked meds
-    old_results = json.loads(record.results_json) if record.results_json else []
-    for old_med in old_results:
-        med_name = old_med.get("medicine") or old_med.get("name", "Unknown")
-        db_med = db.query(models.Medication).filter(
-            models.Medication.user_id == record.user_id,
-            models.Medication.name == med_name
-        ).first()
-        if db_med:
-            db.delete(db_med)
+    db.query(models.Medication).filter(models.Medication.prescription_id == prescription_id).delete()
 
     db.delete(record)
     db.commit()
