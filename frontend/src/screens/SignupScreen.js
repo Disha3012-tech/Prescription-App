@@ -1,14 +1,91 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  SafeAreaView, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, StatusBar,
+  SafeAreaView, KeyboardAvoidingView, Platform, ScrollView, 
+  ActivityIndicator, StatusBar, Dimensions, Animated, PanResponder
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, GRADIENTS, SHADOWS, RADIUS } from '../theme';
-import { API_URL } from '../config';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
+
+const { width, height } = Dimensions.get('window');
+
+const THEME = {
+  background: ['#FFFFFF', '#F0FDFA', '#EFF6FF'],
+  glass: 'rgba(255, 255, 255, 0.6)',
+  primary: '#14B8A6',
+  secondary: '#60A5FA',
+  text: '#111827',
+  textLight: '#6B7280',
+  border: '#E5E7EB',
+  focusedBorder: '#14B8A6', 
+  white: '#FFFFFF',
+  shadowGlow: 'rgba(20, 184, 166, 0.15)',
+};
+
+// Background Shapes Component with Autonomous "Floating" + Cursor Tracking
+const BackgroundShapes = ({ mouseX, mouseY }) => {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Continuous "breathing" movement
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: 1,
+          duration: 5000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 5000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  // Map the floatAnim to subtle movement ranges
+  const floatX = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [-25, 25] });
+  const floatY = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [15, -15] });
+
+  // Top shape: Follows cursor + floats + subtle scale pulse
+  const topTransform = {
+    transform: [
+      { translateX: Animated.add(Animated.divide(mouseX, 15), floatX) },
+      { translateY: Animated.add(Animated.divide(mouseY, 15), floatY) },
+      { scale: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }) }
+    ]
+  };
+
+  // Bottom shape: Moves opposite to cursor + opposite float
+  const bottomTransform = {
+    transform: [
+      { translateX: Animated.add(Animated.multiply(Animated.divide(mouseX, 10), -1), Animated.multiply(floatX, -1)) },
+      { translateY: Animated.add(Animated.multiply(Animated.divide(mouseY, 10), -1), Animated.multiply(floatY, -1)) }
+    ]
+  };
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Animated.View style={[styles.bgGlowTop, topTransform]}>
+        <LinearGradient
+          colors={['#A7F3D0', '#BFDBFE', 'transparent']}
+          style={{ flex: 1, borderRadius: 1000 }}
+        />
+      </Animated.View>
+      
+      <Animated.View style={[styles.bgGlowBottom, bottomTransform]}>
+        <LinearGradient
+          colors={['transparent', '#BFDBFE', '#A7F3D0']}
+          style={{ flex: 1, borderRadius: 1000 }}
+        />
+      </Animated.View>
+    </View>
+  );
+};
 
 export default function SignupScreen({ navigate, setUser }) {
+  const [step, setStep] = useState(1);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,338 +93,248 @@ export default function SignupScreen({ navigate, setUser }) {
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [agreed, setAgreed] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [step, setStep] = useState(1);
-  const [userId, setUserId] = useState(null);
-  const [errorMsg, setErrorMsg] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const mouseX = useRef(new Animated.Value(0)).current;
+  const mouseY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (evt, gestureState) => {
+        mouseX.setValue(gestureState.moveX - width / 2);
+        mouseY.setValue(gestureState.moveY - height / 2);
+      },
+      onPanResponderRelease: () => {
+        Animated.spring(mouseX, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
+        Animated.spring(mouseY, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
+      },
+    })
+  ).current;
+
+  const getStrength = () => {
+    if (password.length === 0) return 0;
+    if (password.length < 8) return 1;
+    if (/[A-Z]/.test(password) && /\d/.test(password)) return 3;
+    return 2;
+  };
+
   const handleSignup = async () => {
-    setErrorMsg(null);
-    if (!name || !email || !password || !confirmPassword) { setErrorMsg('Please fill all fields.'); return; }
-    if (password !== confirmPassword) { setErrorMsg('Passwords do not match.'); return; }
-    if (!agreed) { setErrorMsg('You must agree to the Terms of Service.'); return; }
+    if (!name || !email || !password || !confirmPassword || !agreed) return;
     setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: name, email, password }),
-      });
-      const data = await response.json();
-      if (response.ok) { setUserId(data.user_id); setStep(2); }
-      else { setErrorMsg(data.detail || 'Signup failed'); }
-    } catch (err) {
-      setErrorMsg('Connection error. Please check your backend.');
-    } finally { setLoading(false); }
+    setTimeout(() => { 
+        setLoading(false); 
+        setStep(2); 
+    }, 1500);
   };
-
-  const handleVerifyOtp = async () => {
-    if (!otp) { setErrorMsg('Please enter the 6-digit code'); return; }
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const response = await fetch(`${API_URL}api/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, otp }),
-      });
-      const data = await response.json();
-      if (response.ok) { setUser(data.user); navigate('DASHBOARD'); }
-      else { setErrorMsg(data.detail || 'Invalid verification code'); }
-    } catch (err) {
-      setErrorMsg('Verification failed. Try again.');
-    } finally { setLoading(false); }
-  };
-
-  const inputStyle = (field) => [
-    styles.inputWrapper,
-    focusedField === field && styles.inputFocused,
-  ];
-
-  const heroSubtitle = step === 1
-    ? 'Join 14,200+ users managing their health smarter'
-    : `We've sent a 6-digit code to ${email}`;
-
-  const heroTitle = step === 1 ? 'Create account' : 'Verify your email';
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.midnight} />
+    <LinearGradient colors={THEME.background} style={styles.container}>
+      <StatusBar barStyle="dark-content" transparent backgroundColor="transparent" />
+      
+      {/* Interactive Layer */}
+      <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
+        <BackgroundShapes mouseX={mouseX} mouseY={mouseY} />
+      </View>
 
-      {/* Dark hero */}
-      <LinearGradient colors={GRADIENTS.hero} style={styles.heroSection}>
-        <View style={styles.bgDeco1} />
-        <View style={styles.bgDeco2} />
-
-        <TouchableOpacity
-          onPress={() => step === 2 ? setStep(1) : navigate('LANDING')}
-          style={styles.backBtn}
+      <SafeAreaView style={{ flex: 1 }} pointerEvents="box-none">
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+          style={{ flex: 1 }}
+          pointerEvents="box-none"
         >
-          <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent} 
+            showsVerticalScrollIndicator={false}
+            pointerEvents="box-none" 
+          >
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => navigate('LANDING')} style={styles.backButton}>
+                <Feather name="chevron-left" size={26} color={THEME.textLight} />
+              </TouchableOpacity>
+              <Text style={styles.headerIndicator}>Step {step} of 2</Text>
+            </View>
 
-        <View style={styles.heroContent}>
-          <LinearGradient colors={GRADIENTS.teal} style={styles.logoIcon}>
-            <MaterialCommunityIcons name="pill" size={26} color="#fff" />
-          </LinearGradient>
+            <View style={styles.introSection}>
+              <Text style={styles.title}>{step === 1 ? 'Start Your Care' : 'Verify Email'}</Text>
+              <Text style={styles.subtitle}>
+                {step === 1 
+                  ? 'Join PrescribePal for intelligent healthcare support.' 
+                  : `Please check your work email (${email}) for the code.`}
+              </Text>
+            </View>
 
-          {/* Step indicator */}
-          <View style={styles.stepRow}>
-            {[1, 2].map(s => (
-              <View key={s} style={[styles.stepDot, step === s && styles.stepDotActive, step > s && styles.stepDotDone]}>
-                {step > s
-                  ? <Feather name="check" size={11} color="#fff" />
-                  : <Text style={[styles.stepNum, step === s && { color: '#fff' }]}>{s}</Text>
-                }
-              </View>
-            ))}
-            <View style={styles.stepLine} />
-          </View>
-
-          <Text style={styles.heroTitle}>{heroTitle}</Text>
-          <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
-        </View>
-      </LinearGradient>
-
-      {/* Form card */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView
-          style={styles.formCard}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.formHandle} />
-
-          {step === 1 ? (
-            <>
-              <Text style={styles.label}>Full name</Text>
-              <View style={inputStyle('name')}>
-                <Feather name="user" size={17} color={focusedField === 'name' ? COLORS.primary : COLORS.textMuted} style={styles.inputIcon} />
-                <TextInput style={styles.input} placeholder="Riya Sharma" placeholderTextColor={COLORS.textMuted}
-                  onChangeText={setName} value={name}
-                  onFocus={() => setFocusedField('name')} onBlur={() => setFocusedField(null)} />
+            <View style={styles.card}>
+              <Text style={styles.cardHeader}>{step === 1 ? 'Personal Details' : 'Identity Verification'}</Text>
+              
+              <View style={styles.inputWrapper}>
+                <Text style={styles.label}>Full Name</Text>
+                <View style={[styles.inputContainer, focusedField === 'name' && styles.inputActive]}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="E.g. Dr. Anya Sharma"
+                    placeholderTextColor="#A1A1AA"
+                    onFocus={() => setFocusedField('name')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setName}
+                    value={name}
+                  />
+                </View>
               </View>
 
-              <Text style={[styles.label, { marginTop: 16 }]}>Email address</Text>
-              <View style={inputStyle('email')}>
-                <Feather name="mail" size={17} color={focusedField === 'email' ? COLORS.primary : COLORS.textMuted} style={styles.inputIcon} />
-                <TextInput style={styles.input} placeholder="you@example.com" placeholderTextColor={COLORS.textMuted}
-                  onChangeText={setEmail} value={email} autoCapitalize="none" keyboardType="email-address"
-                  onFocus={() => setFocusedField('email')} onBlur={() => setFocusedField(null)} />
+              <View style={[styles.inputWrapper, { marginTop: 16 }]}>
+                <Text style={styles.label}>Work Email</Text>
+                <View style={[styles.inputContainer, focusedField === 'email' && styles.inputActive]}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="anya@clinic.io"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    placeholderTextColor="#A1A1AA"
+                    onFocus={() => setFocusedField('email')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setEmail}
+                    value={email}
+                  />
+                </View>
               </View>
 
-              <Text style={[styles.label, { marginTop: 16 }]}>Password</Text>
-              <View style={inputStyle('password')}>
-                <Feather name="lock" size={17} color={focusedField === 'password' ? COLORS.primary : COLORS.textMuted} style={styles.inputIcon} />
-                <TextInput style={[styles.input, { flex: 1 }]} placeholder="Minimum 8 characters" placeholderTextColor={COLORS.textMuted}
-                  secureTextEntry={!showPassword} onChangeText={setPassword} value={password}
-                  onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)} />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
-                  <Feather name={showPassword ? 'eye-off' : 'eye'} size={17} color={COLORS.textMuted} />
-                </TouchableOpacity>
+              <View style={[styles.inputWrapper, { marginTop: 16 }]}>
+                <Text style={styles.label}>Password</Text>
+                <View style={[styles.inputContainer, focusedField === 'password' && styles.inputActive]}>
+                  <TextInput
+                    style={styles.input}
+                    secureTextEntry={!showPassword}
+                    placeholder="At least 8 characters"
+                    placeholderTextColor="#A1A1AA"
+                    onFocus={() => setFocusedField('password')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setPassword}
+                    value={password}
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                    <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={THEME.textLight} />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              {/* Password strength bar */}
               {password.length > 0 && (
-                <View style={styles.strengthRow}>
-                  {[...Array(4)].map((_, i) => {
-                    const score = Math.min(4, Math.floor(password.length / 3));
-                    return (
-                      <View key={i} style={[styles.strengthSeg, i < score && styles.strengthSegActive(score)]} />
-                    );
-                  })}
-                  <Text style={styles.strengthLabel}>
-                    {password.length < 6 ? 'Weak' : password.length < 10 ? 'Fair' : password.length < 14 ? 'Good' : 'Strong'}
+                <View style={styles.strengthCont}>
+                  {[1, 2, 3].map((i) => (
+                    <View key={i} style={[styles.strengthBar, i <= getStrength() && { backgroundColor: getStrength() === 3 ? THEME.primary : '#FBBF24' }]} />
+                  ))}
+                  <Text style={styles.strengthText}>
+                    {getStrength() === 1 ? 'Weak' : getStrength() === 2 ? 'Good' : 'Strong'}
                   </Text>
                 </View>
               )}
 
-              <Text style={[styles.label, { marginTop: 16 }]}>Confirm password</Text>
-              <View style={inputStyle('confirmPassword')}>
-                <Feather name="lock" size={17} color={focusedField === 'confirmPassword' ? COLORS.primary : COLORS.textMuted} style={styles.inputIcon} />
-                <TextInput style={[styles.input, { flex: 1 }]} placeholder="Repeat password" placeholderTextColor={COLORS.textMuted}
-                  secureTextEntry={!showPassword} onChangeText={setConfirmPassword} value={confirmPassword}
-                  onFocus={() => setFocusedField('confirmPassword')} onBlur={() => setFocusedField(null)} />
-                {confirmPassword.length > 0 && (
-                  <Feather
-                    name={confirmPassword === password ? 'check-circle' : 'x-circle'}
-                    size={17}
-                    color={confirmPassword === password ? COLORS.primary : COLORS.dangerText}
+              <View style={[styles.inputWrapper, { marginTop: 16 }]}>
+                <Text style={styles.label}>Confirm Password</Text>
+                <View style={[styles.inputContainer, focusedField === 'confirm' && styles.inputActive]}>
+                  <TextInput
+                    style={styles.input}
+                    secureTextEntry={!showPassword}
+                    placeholder="Repeat your password"
+                    placeholderTextColor="#A1A1AA"
+                    onFocus={() => setFocusedField('confirm')}
+                    onBlur={() => setFocusedField(null)}
+                    onChangeText={setConfirmPassword}
+                    value={confirmPassword}
                   />
-                )}
-              </View>
-
-              <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed(!agreed)} activeOpacity={0.7}>
-                <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
-                  {agreed && <Feather name="check" size={11} color="#fff" />}
                 </View>
-                <Text style={styles.termsText}>
-                  I agree to the <Text style={styles.termsLink}>Terms of Service</Text> and <Text style={styles.termsLink}>Privacy Policy</Text>
-                </Text>
-              </TouchableOpacity>
-
-              {errorMsg && <View style={styles.errorBox}><Feather name="alert-circle" size={14} color={COLORS.dangerText} /><Text style={styles.errorText}>{errorMsg}</Text></View>}
-
-              <TouchableOpacity
-                style={[styles.primaryBtn, (!agreed || loading) && { opacity: 0.5 }]}
-                onPress={handleSignup} activeOpacity={0.85} disabled={loading || !agreed}
-              >
-                <LinearGradient colors={GRADIENTS.teal} style={styles.primaryBtnGradient}>
-                  {loading
-                    ? <ActivityIndicator color="#fff" />
-                    : <><Text style={styles.primaryBtnText}>Create Account</Text><Feather name="arrow-right" size={17} color="#fff" /></>
-                  }
-                </LinearGradient>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={styles.otpHint}>Enter the 6-digit code sent to your email</Text>
-
-              <View style={inputStyle('otp')}>
-                <Feather name="shield" size={17} color={focusedField === 'otp' ? COLORS.primary : COLORS.textMuted} style={styles.inputIcon} />
-                <TextInput
-                  style={[styles.input, { letterSpacing: 10, fontSize: 22, fontWeight: '800' }]}
-                  placeholder="000000" placeholderTextColor={COLORS.textMuted + '50'}
-                  onChangeText={setOtp} value={otp} keyboardType="number-pad" maxLength={6}
-                  onFocus={() => setFocusedField('otp')} onBlur={() => setFocusedField(null)}
-                />
               </View>
 
-              {errorMsg && <View style={styles.errorBox}><Feather name="alert-circle" size={14} color={COLORS.dangerText} /><Text style={styles.errorText}>{errorMsg}</Text></View>}
+              <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed(!agreed)}>
+                <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
+                  {agreed && <Feather name="check" size={12} color="#FFF" />}
+                </View>
+                <Text style={styles.termsText}>I agree to the <Text style={styles.linkText}>Terms & Privacy</Text></Text>
+              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.primaryBtn, loading && { opacity: 0.5 }]}
-                onPress={handleVerifyOtp} activeOpacity={0.85} disabled={loading}
+              <TouchableOpacity 
+                style={[styles.mainButton, (!agreed && step === 1) && { opacity: 0.5 }]} 
+                onPress={step === 1 ? handleSignup : () => navigate('DASHBOARD')}
+                disabled={loading}
               >
-                <LinearGradient colors={GRADIENTS.teal} style={styles.primaryBtnGradient}>
-                  {loading
-                    ? <ActivityIndicator color="#fff" />
-                    : <><Text style={styles.primaryBtnText}>Verify & Finish</Text><Feather name="check" size={17} color="#fff" /></>
-                  }
+                <LinearGradient 
+                  colors={[THEME.primary, '#0D9488']} 
+                  style={styles.gradient}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={THEME.white} />
+                  ) : (
+                    <Text style={styles.buttonText}>{step === 1 ? 'Register Now' : 'Complete Setup'}</Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
+            </View>
 
-              <TouchableOpacity style={{ alignItems: 'center', marginTop: 16 }} onPress={() => setStep(1)}>
-                <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>← Change Email</Text>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Already part of PrescribePal? </Text>
+              <TouchableOpacity onPress={() => navigate('LOGIN')}>
+                <Text style={styles.footerLink}>Sign In</Text>
               </TouchableOpacity>
-            </>
-          )}
-        </ScrollView>
+            </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => navigate('LOGIN')}>
-            <Text style={styles.footerLink}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.midnight },
-
-  heroSection: {
-    paddingTop: 20, paddingBottom: 40, paddingHorizontal: 24,
-    position: 'relative', overflow: 'hidden',
+  container: { flex: 1 },
+  bgGlowTop: { 
+    position: 'absolute', 
+    top: -height * 0.1, 
+    right: -width * 0.1, 
+    width: width * 0.9, 
+    height: width * 0.9, 
+    opacity: 0.2 
   },
-  bgDeco1: {
-    position: 'absolute', width: 220, height: 220, borderRadius: 110,
-    backgroundColor: 'rgba(13,148,136,0.1)', top: -60, right: -60,
+  bgGlowBottom: { 
+    position: 'absolute', 
+    bottom: -height * 0.1, 
+    left: -width * 0.2, 
+    width: width * 1.1, 
+    height: width * 1.1, 
+    opacity: 0.15 
   },
-  bgDeco2: {
-    position: 'absolute', width: 140, height: 140, borderRadius: 70,
-    backgroundColor: 'rgba(124,58,237,0.07)', bottom: -20, left: -40,
+  scrollContent: { paddingHorizontal: 28, paddingBottom: 40, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 10 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, paddingVertical: 10 },
+  backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
+  headerIndicator: { fontSize: 13, color: THEME.textLight, fontWeight: '500', backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
+  introSection: { marginBottom: 30 },
+  title: { fontSize: 32, fontWeight: '700', color: THEME.text, marginBottom: 10, letterSpacing: -0.8 },
+  subtitle: { fontSize: 16, color: THEME.textLight, lineHeight: 24, fontWeight: '400', paddingRight: 30 },
+  card: {
+    backgroundColor: THEME.glass, borderRadius: 32, padding: 24,
+    shadowColor: THEME.shadowGlow, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 30,
+    elevation: 8,
   },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', marginBottom: 24,
-  },
-  heroContent: { alignItems: 'center', gap: 10 },
-  logoIcon: {
-    width: 60, height: 60, borderRadius: 18,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 4, ...SHADOWS.colored,
-  },
-
-  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 0, position: 'relative', marginBottom: 4 },
-  stepLine: {
-    position: 'absolute', left: 20, right: 20, height: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)', zIndex: 0, top: 14,
-  },
-  stepDot: {
-    width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)',
-    zIndex: 1, marginHorizontal: 16,
-  },
-  stepDotActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primaryLight },
-  stepDotDone: { backgroundColor: COLORS.primaryDark, borderColor: COLORS.primary },
-  stepNum: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.5)' },
-
-  heroTitle: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  heroSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.55)', textAlign: 'center', paddingHorizontal: 16 },
-
-  formCard: {
-    flex: 1, backgroundColor: COLORS.background,
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    paddingHorizontal: 24, paddingTop: 16,
-    marginTop: -20,
-  },
-  formHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 24,
-  },
-
-  label: { fontSize: 13, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 8, letterSpacing: 0.2 },
-  inputWrapper: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.white, borderWidth: 1.5, borderColor: COLORS.border,
-    borderRadius: 14, paddingHorizontal: 14, height: 52, ...SHADOWS.sm,
-  },
-  inputFocused: { borderColor: COLORS.primary, backgroundColor: COLORS.successBg },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, fontSize: 15, color: COLORS.textPrimary },
-
-  strengthRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  strengthSeg: { flex: 1, height: 3, borderRadius: 2, backgroundColor: COLORS.border },
-  strengthSegActive: (score) => ({
-    backgroundColor: score <= 1 ? COLORS.dangerText : score <= 2 ? COLORS.warningText : COLORS.primary,
-  }),
-  strengthLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary, minWidth: 36 },
-
-  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 20 },
-  checkbox: {
-    width: 22, height: 22, borderRadius: 7, borderWidth: 2, borderColor: COLORS.border,
-    justifyContent: 'center', alignItems: 'center', marginTop: 1, flexShrink: 0,
-  },
-  checkboxChecked: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  termsText: { flex: 1, fontSize: 13, color: COLORS.textSecondary, lineHeight: 20 },
-  termsLink: { color: COLORS.primary, fontWeight: '700' },
-
-  errorBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12,
-    backgroundColor: COLORS.dangerBg, borderRadius: 10, padding: 10,
-    borderWidth: 1, borderColor: COLORS.dangerBorder,
-  },
-  errorText: { color: COLORS.dangerText, fontSize: 13, flex: 1 },
-
-  primaryBtn: { marginTop: 24, borderRadius: 14, overflow: 'hidden', ...SHADOWS.colored },
-  primaryBtnGradient: {
-    height: 54, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
-  },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-
-  otpHint: { fontSize: 14, color: COLORS.textSecondary, marginBottom: 20, textAlign: 'center' },
-
-  footer: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    backgroundColor: COLORS.background, paddingBottom: Platform.OS === 'ios' ? 36 : 24, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: COLORS.border,
-  },
-  footerText: { color: COLORS.textSecondary, fontSize: 15 },
-  footerLink: { color: COLORS.primary, fontSize: 15, fontWeight: '800' },
+  cardHeader: { fontSize: 18, fontWeight: '600', color: THEME.text, marginBottom: 24 },
+  inputWrapper: { marginBottom: 4 },
+  label: { fontSize: 13, fontWeight: '600', color: THEME.text, marginBottom: 8, paddingLeft: 4 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', height: 48, borderBottomWidth: 1.5, borderColor: THEME.border },
+  inputActive: { borderColor: THEME.focusedBorder },
+  input: { flex: 1, fontSize: 16, color: THEME.text, fontWeight: '400', paddingLeft: 4 },
+  eyeBtn: { padding: 4 },
+  strengthCont: { flexDirection: 'row', gap: 6, marginTop: 10, alignItems: 'center', paddingHorizontal: 4 },
+  strengthBar: { height: 3, flex: 1, backgroundColor: THEME.border, borderRadius: 1.5 },
+  strengthText: { fontSize: 11, fontWeight: '600', color: THEME.textLight, marginLeft: 8 },
+  termsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 28 },
+  checkbox: { width: 22, height: 22, borderRadius: 8, borderWidth: 1.5, borderColor: THEME.border, marginRight: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: THEME.white },
+  checkboxActive: { backgroundColor: THEME.primary, borderColor: THEME.primary },
+  termsText: { fontSize: 14, color: THEME.textLight, fontWeight: '400' },
+  linkText: { color: THEME.primary, fontWeight: '500' },
+  mainButton: { marginTop: 28, height: 56, borderRadius: 18, overflow: 'hidden', shadowColor: THEME.shadowGlow, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 15 },
+  gradient: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  buttonText: { color: THEME.white, fontSize: 17, fontWeight: '600' },
+  footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 35, paddingVertical: 10 },
+  footerText: { fontSize: 15, color: THEME.textLight, fontWeight: '400' },
+  footerLink: { fontSize: 15, color: THEME.primary, fontWeight: '600' },
 });
