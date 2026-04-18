@@ -271,16 +271,7 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* ── Raw OCR Text ── */}
-        {record.raw_text ? (
-          <View style={styles.rawTextSection}>
-            <View style={styles.imageSectionHeader}>
-              <Feather name="file-text" size={14} color={COLORS.textSecondary} />
-              <Text style={styles.imageSectionTitle}>SCANNED TEXT</Text>
-            </View>
-            <Text style={styles.rawText}>{record.raw_text}</Text>
-          </View>
-        ) : null}
+
 
         {/* ── Medicine Analysis ── */}
         <View style={styles.medsSection}>

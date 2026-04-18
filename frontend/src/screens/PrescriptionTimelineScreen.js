@@ -172,7 +172,7 @@ const stats = StyleSheet.create({
 // ─── Main Screen ────────────────────────────────────────────────────────────────
 const FILTERS = ['All', 'Scans', 'Manual'];
 
-export default function PrescriptionTimelineScreen({ user, navigate }) {
+export default function PrescriptionTimelineScreen({ user, navigate, goBack }) {
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('All');
@@ -189,32 +189,35 @@ export default function PrescriptionTimelineScreen({ user, navigate }) {
             const res = await fetch(`${API_URL}api/prescriptions/history?user_id=${user.id}`);
             const data = await res.json();
             if (data.status === 'success') {
-                setHistory(data.history.map(item => ({
-                    id: item.id,
-                    date: item.date,
-                    type: item.country === 'Manual' ? 'manual' : 'scan',
-                    title: item.results?.[0]?.explanation?.medicine_class || 'Rx Scan',
-                    subtitle: `${item.results?.length || 0} medicine${item.results?.length !== 1 ? 's' : ''} · ${item.country || ''}`,
-                    medicines: item.results?.map(r => r.medicine) || [],
-                    confidence: item.avg_confidence,
-                    image_url: item.image_url,
-                    fullRecord: {
+                setHistory(data.history.map(item => {
+                    const isManual = item.country === 'Manual';
+                    return {
                         id: item.id,
                         date: item.date,
-                        condition: item.results?.[0]?.explanation?.medicine_class || 'General Checkup',
-                        doctor: item.results?.[0]?.explanation?.brand_name || 'Prescription Scan',
+                        type: isManual ? 'manual' : 'scan',
+                        title: item.results?.[0]?.explanation?.medicine_class || (isManual ? 'Health Record' : 'Rx Scan'),
+                        subtitle: `${item.results?.length || 0} medicine${item.results?.length !== 1 ? 's' : ''}${isManual ? ' · Added manually' : ` · ${item.country || 'Scanned'}`}`,
                         medicines: item.results?.map(r => r.medicine) || [],
-                        fullResults: item.results,
-                        notes: item.results?.[0]?.explanation?.what_it_does || item.raw_text?.substring(0, 100),
-                        image_url: item.image_url
-                            ? (item.image_url.startsWith('http') ? item.image_url : `${API_URL.replace(/\/$/, '')}${item.image_url}`)
-                            : null,
-                        raw_text: item.raw_text,
-                        avg_confidence: item.avg_confidence,
-                        country: item.country,
-                        currency: item.currency,
-                    },
-                })));
+                        confidence: item.avg_confidence,
+                        image_url: item.image_url,
+                        fullRecord: {
+                            id: item.id,
+                            date: item.date,
+                            condition: item.results?.[0]?.explanation?.medicine_class || 'General Checkup',
+                            doctor: item.results?.[0]?.explanation?.brand_name || 'Prescription Scan',
+                            medicines: item.results?.map(r => r.medicine) || [],
+                            fullResults: item.results,
+                            notes: item.results?.[0]?.explanation?.what_it_does || item.raw_text?.substring(0, 100),
+                            image_url: item.image_url
+                                ? (item.image_url.startsWith('http') ? item.image_url : `${API_URL.replace(/\/$/, '')}${item.image_url}`)
+                                : null,
+                            raw_text: item.raw_text,
+                            avg_confidence: item.avg_confidence,
+                            country: item.country,
+                            currency: item.currency,
+                        },
+                    };
+                }));
             }
         } catch (e) {
             console.error('Timeline fetch error', e);
@@ -253,7 +256,7 @@ export default function PrescriptionTimelineScreen({ user, navigate }) {
             <LinearGradient colors={GRADIENTS.hero} style={styles.header}>
                 <View style={styles.bgDeco} />
                 <View style={styles.headerTop}>
-                    <TouchableOpacity onPress={() => navigate('DASHBOARD')} style={styles.backBtn}>
+                    <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
                         <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
                     <View style={{ flex: 1, paddingLeft: 14 }}>

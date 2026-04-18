@@ -20,7 +20,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
 # ✅ Print which DB is being used (debugging)
-print("📦 Using DB file at:", os.path.abspath(DB_URL.replace("sqlite:///", "")))
+print("Using DB file at:", os.path.abspath(DB_URL.replace("sqlite:///", "")))
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -19,7 +19,7 @@ from app.matcher import detect_medicines
 from app.llm_corrector import correct_medicines
 from app.structurer import structure_medicines
 from app.explain import explain_medicine
-from app.llm import call_llm_chat, call_llm
+from app.llm import call_llm_chat, call_llm, call_llm_vision
 
 # ─── Models ───────────────────────────────────────────────────────────────
 
@@ -53,7 +53,14 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:19000",
+        "http://localhost:19006",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -65,7 +72,24 @@ app.include_router(medications_router)
 app.include_router(symptoms_router)
 app.include_router(family_router)
 
-# ─── Endpoints ────────────────────────────────────────────────────────────
+@app.get("/api/health-score")
+async def get_health_score(user_id: str, db: Session = Depends(get_db)):
+    medications = db.query(models.Medication).filter(models.Medication.user_id == user_id).all()
+    if not medications:
+        return {"score": 72, "trend": "+0 this week"}
+    total_doses = 0
+    taken_doses = 0
+    for med in medications:
+        times = db.query(models.MedicationTime).filter(models.MedicationTime.medication_id == med.id).all()
+        total_doses += len(times)
+        taken_doses += sum(1 for t in times if t.taken)
+    
+    score = 72
+    if total_doses > 0:
+        adherence = taken_doses / total_doses
+        score = min(100, 72 + int(adherence * 28))
+        
+    return {"score": score, "trend": f"+{int(adherence * 10)} this week"}
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
@@ -210,10 +234,14 @@ async def analyze(
             buffer.write(content)
 
         # 1. OCR
+        # 1. OCR
         ocr_data = extract_text(file_path)
         raw_text = ocr_data["full_text"]
         ocr_words = ocr_data["words"]
         avg_confidence = ocr_data["avg_confidence"]
+
+        print(f"=== RAW OCR (confidence: {avg_confidence}) ===")
+        print(raw_text[:300])
 
         if not raw_text.strip():
             return {"status": "error", "message": "No readable text found in image"}
@@ -221,12 +249,98 @@ async def analyze(
         # 2. Clean text
         cleaned_text = clean_text(raw_text)
 
-        # 3. Rough medicine detection
-        rough_meds = detect_medicines(cleaned_text)
+        # Decide: use vision directly if OCR confidence is too low
+        word_count = len(cleaned_text.split())
+        use_vision = avg_confidence < 55 or word_count < 10
 
-        # 4. LLM correction (using primary OCR + TrOCR as secondary evidence)
-        trocr_text = ocr_data.get("trocr_text", "")
-        corrected_meds = correct_medicines(rough_meds, cleaned_text, country, trocr_text=trocr_text)
+        if use_vision:
+            print("[VISION FALLBACK] OCR too noisy — sending image directly to Claude vision")
+            
+            from app.structurer import COUNTRY_SHORTHAND
+            shorthand = COUNTRY_SHORTHAND.get(country, COUNTRY_SHORTHAND["India"])
+            
+            vision_prompt = f"""You are a clinical pharmacist reading a handwritten prescription from {country}.
+
+Read EVERY line of the prescription carefully. Extract ALL medicines listed in the advice/prescription section.
+
+Prescription shorthand for {country}:
+{shorthand}
+
+IMPORTANT RULES:
+1. If you see the same medicine name twice (e.g. "Nikoran" and "Nikoan"), they are the SAME medicine — include it only ONCE with the best reading.
+2. Look carefully at numbers next to medicine names — those are dosages (e.g. "500" = 500mg, "40" = 40mg).
+3. Time indicators like "4 PM", "night", "morning", "BD", "OD" are frequencies — include them.
+4. Lines with dashes (———) often connect a medicine name on the left to a dose/frequency on the right.
+5. Do NOT include: doctor name, patient name, clinic address, dates, diagnoses, registration numbers.
+6. The "Advice" section is where medicines are listed — focus there.
+
+Return ONLY a valid JSON array, no markdown:
+[{{
+  "name": "exact medicine name as written",
+  "form": "tablet or syrup or capsule or drops or injection or cream",
+  "dosage": "e.g. 500 mg or 40 mg or 4 ml — empty string if not visible",
+  "frequency": "in plain English e.g. once daily or twice daily or at night or at 4 PM",
+  "duration": "e.g. 3 days or 1 month — empty string if not visible",
+  "confidence": 0.0-1.0
+}}]"""
+
+            try:
+                vision_raw = call_llm_vision(file_path, vision_prompt)
+                print("Vision response:", vision_raw)
+                
+                clean_v = vision_raw.strip().strip("```json").strip("```").strip()
+                structured = json.loads(clean_v)
+                
+                # Normalize fields
+                for item in structured:
+                    item["confidence"] = float(item.get("confidence", 0.75))
+                    item["uncertain"] = item["confidence"] < 0.6
+                    item["bbox"] = None
+                    # Ensure no null values
+                    for field in ["form", "dosage", "frequency", "duration"]:
+                        if item.get(field) is None:
+                            item[field] = ""
+
+                medicine_highlights = [
+                    {
+                        "medicine": s.get("name"),
+                        "bbox": None,
+                        "confidence": s.get("confidence", 0.75),
+                        "uncertain": s.get("uncertain", False),
+                    }
+                    for s in structured
+                ]
+
+                return {
+                    "status": "success",
+                    "raw_text": raw_text,
+                    "cleaned_text": cleaned_text,
+                    "avg_confidence": avg_confidence,
+                    "ocr_words": ocr_words,
+                    "medicine_highlights": medicine_highlights,
+                    "country": country,
+                    "currency": currency,
+                    "results": structured,
+                    "image_url": f"/uploads/{file_path.split('/')[-1]}",
+                    "image_hash": image_hash
+                }
+                
+            except Exception as e:
+                print(f"[VISION ERROR] {e} — falling through to OCR pipeline")
+                # Fall through to normal pipeline if vision fails
+
+        # NORMAL PATH — OCR confidence good enough
+        # 3. Rough medicine detection
+        fuzzy_candidates = detect_medicines(cleaned_text)
+
+        # 4. LLM correction
+        corrected_meds = correct_medicines(
+            meds=[],
+            text=cleaned_text,
+            country=country,
+            trocr_text=ocr_data.get("trocr_text", ""),
+            fuzzy_candidates=fuzzy_candidates
+        )
 
         # 5. Structure extraction
         structured = structure_medicines(corrected_meds, cleaned_text, country, ocr_words=ocr_words)
@@ -347,21 +461,41 @@ async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
         ]
         for idx, r in enumerate(results):
             c = colors[idx % len(colors)]
+            # Access nested AI result
+            exp = r.get("explanation", {})
             new_med = models.Medication(
                 user_id=req.user_id,
                 prescription_id=new_record.id,
                 name=r.get("medicine", "Unknown"),
                 dose=r.get("dosage", "Standard dose"),
                 color=c["color"],
-                color_bg=c["bg"]
+                color_bg=c["bg"],
+                explanation_json=json.dumps(r) # Cache explanation during scan
             )
             db.add(new_med)
             db.commit()
             db.refresh(new_med)
-            t1 = models.MedicationTime(medication_id=new_med.id, label="Morning", time="8:00 AM", taken=False, icon="weather-sunny")
-            t2 = models.MedicationTime(medication_id=new_med.id, label="Evening", time="8:00 PM", taken=False, icon="weather-sunset")
-            db.add_all([t1, t2])
-            db.commit()
+            
+            # Use the intelligent schedule from AI
+            schedule = exp.get("schedule", [
+                {"time": "8:00 AM", "label": "Morning", "icon": "weather-sunny"},
+                {"time": "8:00 PM", "label": "Evening", "icon": "weather-sunset"}
+            ])
+            
+            times_to_add = []
+            for s in schedule:
+                times_to_add.append(
+                    models.MedicationTime(
+                        medication_id=new_med.id, 
+                        label=s.get("label", "Dose"), 
+                        time=s.get("time", "12:00 PM"), 
+                        taken=False, 
+                        icon=s.get("icon", "pill")
+                    )
+                )
+            if times_to_add:
+                db.add_all(times_to_add)
+                db.commit()
 
     return {
         "status": "success", 

@@ -57,23 +57,23 @@ const MovingBackground = () => {
   return (
     <View style={StyleSheet.absoluteFill}>
       <LinearGradient colors={[THEME.background, '#E8F5E9']} style={StyleSheet.absoluteFill} />
-      
+
       {/* Orb 1: Mint Glow */}
-      <Animated.View 
-        style={[styles.blurOrb, drift1, { top: '10%', left: '10%', backgroundColor: '#C6F6D5' }]} 
-        blurRadius={Platform.OS === 'ios' ? 80 : 40} 
+      <Animated.View
+        style={[styles.blurOrb, drift1, { top: '10%', left: '10%', backgroundColor: '#C6F6D5' }]}
+        blurRadius={Platform.OS === 'ios' ? 80 : 40}
       />
-      
+
       {/* Orb 2: Deep Obsidian Glow */}
-      <Animated.View 
-        style={[styles.blurOrb, drift2, { bottom: '15%', right: '5%', backgroundColor: '#1A202C', opacity: 0.08 }]} 
-        blurRadius={Platform.OS === 'ios' ? 100 : 50} 
+      <Animated.View
+        style={[styles.blurOrb, drift2, { bottom: '15%', right: '5%', backgroundColor: '#1A202C', opacity: 0.08 }]}
+        blurRadius={Platform.OS === 'ios' ? 100 : 50}
       />
 
       {/* Orb 3: Accent Center */}
-      <Animated.View 
-        style={[styles.blurOrb, drift1, { bottom: '40%', left: '-10%', backgroundColor: THEME.accent, opacity: 0.12 }]} 
-        blurRadius={Platform.OS === 'ios' ? 90 : 45} 
+      <Animated.View
+        style={[styles.blurOrb, drift1, { bottom: '40%', left: '-10%', backgroundColor: THEME.accent, opacity: 0.12 }]}
+        blurRadius={Platform.OS === 'ios' ? 90 : 45}
       />
     </View>
   );
@@ -148,7 +148,7 @@ export default function OnboardingScreen({ navigate }) {
 
               <View style={styles.ctaGroup}>
                 <TouchableOpacity style={styles.primaryBtn} onPress={() => navigate?.('SIGNUP')}>
-                  <LinearGradient colors={[THEME.primary, '#152A24']} style={styles.btnGradient} start={{x:0, y:0}} end={{x:1, y:1}}>
+                  <LinearGradient colors={[THEME.primary, '#152A24']} style={styles.btnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                     <Text style={styles.btnText}>Start Journey</Text>
                     <Feather name="arrow-right" size={20} color={THEME.accent} />
                   </LinearGradient>
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   screen: { height, width, justifyContent: 'center', alignItems: 'center' },
   safeArea: { flex: 1, width: '100%' },
   mainContent: { flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingVertical: 60 },
-  
+
   // BLUR EFFECT STYLES
   blurOrb: {
     position: 'absolute',
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   footerHint: { alignItems: 'center', gap: 8 },
   hintText: { fontSize: 10, fontWeight: '800', color: THEME.textMuted, letterSpacing: 2 },
 
-  glassCard: { width: width * 0.9, height: height * 0.7, backgroundColor: THEME.surface, borderRadius: 40, borderWidth: 1, borderColor: THEME.border, shadowColor: '#000', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.05, shadowRadius: 20, elevation: 5, overflow: 'hidden' },
+  glassCard: { width: width * 0.9, height: height * 0.7, backgroundColor: THEME.surface, borderRadius: 40, borderWidth: 1, borderColor: THEME.border, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.05, shadowRadius: 20, elevation: 5, overflow: 'hidden' },
   cardInner: { flex: 1, padding: 32, alignItems: 'center' },
   visualContainer: { width: 150, height: 150, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   iconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: THEME.background, justifyContent: 'center', alignItems: 'center', zIndex: 2 },

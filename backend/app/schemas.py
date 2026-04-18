@@ -85,6 +85,7 @@ class MedicationResponse(MedicationBase):
     id: str
     user_id: str
     prescription_id: Optional[str] = None
+    explanation_json: Optional[str] = None
     times: List[MedicationTimeResponse]
     class Config:
         from_attributes = True
