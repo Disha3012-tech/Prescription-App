@@ -13,9 +13,9 @@ const { width, height } = Dimensions.get('window');
 const THEME = {
   background: ['#E0F2FE', '#CCFBF1', '#D1FAE5'],
   glass: 'rgba(255, 255, 255, 0.6)',
-  primary: '#14B8A6', 
+  primary: '#14B8A6',
   primaryDark: '#0D9488',
-  secondary: '#60A5FA', 
+  secondary: '#60A5FA',
   text: '#111827',
   textLight: '#6B7280',
   error: '#F43F5E',
@@ -72,7 +72,7 @@ const BackgroundShapes = ({ mouseX, mouseY }) => {
       <Animated.View style={[styles.bgGlowTop, layer1Transform]}>
         <LinearGradient colors={['#A7F3D0', '#BFDBFE', 'transparent']} style={{ flex: 1, borderRadius: 1000 }} />
       </Animated.View>
-      
+
       <Animated.View style={[styles.bgGlowBottom, layer2Transform]}>
         <LinearGradient colors={['transparent', '#BFDBFE', '#A7F3D0']} style={{ flex: 1, borderRadius: 1000 }} />
       </Animated.View>
@@ -80,7 +80,7 @@ const BackgroundShapes = ({ mouseX, mouseY }) => {
   );
 };
 
-export default function LoginScreen({ navigate, setUser }) {
+export default function LoginScreen({ navigate, goBack, setUser }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -132,7 +132,7 @@ export default function LoginScreen({ navigate, setUser }) {
   return (
     <LinearGradient colors={THEME.background} style={styles.container}>
       <StatusBar barStyle="dark-content" transparent backgroundColor="transparent" />
-      
+
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
         <BackgroundShapes mouseX={mouseX} mouseY={mouseY} />
       </View>
@@ -140,9 +140,9 @@ export default function LoginScreen({ navigate, setUser }) {
       <SafeAreaView style={{ flex: 1 }} pointerEvents="box-none">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} pointerEvents="box-none">
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} pointerEvents="box-none">
-            
+
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigate('LANDING')} style={styles.backButton}>
+              <TouchableOpacity onPress={goBack} style={styles.backButton}>
                 <Feather name="chevron-left" size={26} color={THEME.textLight} />
               </TouchableOpacity>
             </View>
@@ -154,7 +154,7 @@ export default function LoginScreen({ navigate, setUser }) {
 
             <View style={styles.card}>
               <Text style={styles.cardHeader}>Login</Text>
-              
+
               <View style={styles.inputWrapper}>
                 <Text style={styles.label}>Email</Text>
                 <View style={[styles.inputContainer, focusedField === 'email' && styles.inputActive]}>

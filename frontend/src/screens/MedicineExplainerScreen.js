@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import {
-    View, Text, StyleSheet, ScrollView, TouchableOpacity,
+    View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
     SafeAreaView, StatusBar, Animated, LayoutAnimation, UIManager, Platform, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -44,124 +44,191 @@ const ConfidenceDot = ({ level }) => {
 // ─── Medicine Explainer Card ───────────────────────────────────────────────────
 const MedicineCard = ({ medicine, index }) => {
     const [expanded, setExpanded] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [data, setData] = useState(medicine);
+
     const rotateAnim = useRef(new Animated.Value(0)).current;
 
-    const toggle = () => {
+    const gradients = [GRADIENTS.teal, GRADIENTS.purple, ['#F43F5E', '#E11D48'], GRADIENTS.gold];
+    const cardGrad = gradients[index % gradients.length];
+
+    const fetchDetails = async () => {
+        if (!medicine._id) return;
+
+        // prevent refetch
+        if (data.sideEffects?.[0] !== 'Loading...') return;
+
+        try {
+            setLoading(true);
+
+            const res = await fetch(`${API_URL}api/medications/${medicine._id}/explain`);
+            const result = await res.json();
+
+            const explanation = result.explanation || {};
+            setData(prev => ({
+                ...prev,
+                class: explanation.medicine_class || prev.class,
+                whatItDoes: explanation.what_it_does || "No data",
+                sideEffects: explanation.side_effects || [],
+                foodInteractions: explanation.food_interactions || [],
+                generics: explanation.generics || [],
+                doctorTip: explanation.doctor_tip || "",
+                approximatePrice: explanation.approximate_price || "",
+                confidence: 'High', // AI successful
+            }));
+
+        } catch (e) {
+            console.log("Explain API error:", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const toggle = async () => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setExpanded(e => !e);
+
+        const newExpanded = !expanded;
+        setExpanded(newExpanded);
+
+        if (newExpanded) {
+            await fetchDetails();
+        }
+
         Animated.timing(rotateAnim, {
-            toValue: expanded ? 0 : 1,
+            toValue: newExpanded ? 1 : 0,
             duration: 250,
             useNativeDriver: true,
         }).start();
     };
 
-    const chevronRotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-
-    const gradients = [GRADIENTS.teal, GRADIENTS.purple, ['#F43F5E', '#E11D48'], GRADIENTS.gold];
-    const cardGrad = gradients[index % gradients.length];
+    const chevronRotate = rotateAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '180deg'],
+    });
 
     return (
         <View style={card.wrap}>
-            {/* Collapsed header — always visible */}
+            {/* Header */}
             <TouchableOpacity onPress={toggle} activeOpacity={0.8} style={card.header}>
                 <LinearGradient colors={cardGrad} style={card.iconBox}>
                     <MaterialCommunityIcons name="pill" size={20} color="#fff" />
                 </LinearGradient>
+
                 <View style={{ flex: 1 }}>
-                    <Text style={card.medName}>{medicine.name}</Text>
-                    <Text style={card.medClass}>{medicine.class} · {medicine.dose}</Text>
+                    <Text style={card.medName}>{data.name}</Text>
+                    <Text style={card.medClass}>{data.class} · {data.dose}</Text>
                 </View>
+
                 <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                    <ConfidenceDot level={medicine.confidence} />
+                    <ConfidenceDot level={data.confidence} />
                     <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
                         <Feather name="chevron-down" size={18} color={COLORS.textSecondary} />
                     </Animated.View>
                 </View>
             </TouchableOpacity>
 
-            {/* Quick chips always visible */}
+            {/* Tags */}
             <View style={card.chips}>
-                {medicine.tags.map((tag, i) => (
+                {data.tags?.map((tag, i) => (
                     <View key={i} style={card.chip}>
                         <Text style={card.chipText}>{tag}</Text>
                     </View>
                 ))}
             </View>
 
-            {/* Expanded detail */}
+            {/* Expanded */}
             {expanded && (
                 <View style={card.detail}>
                     <View style={card.divider} />
 
-                    {/* What it does */}
-                    <InfoSection icon="information-outline" iconColor={COLORS.primary} iconBg={COLORS.successBg} title="What it does">
-                        <Text style={card.bodyText}>{medicine.whatItDoes}</Text>
-                    </InfoSection>
+                    {loading ? (
+                        <ActivityIndicator size="small" color={COLORS.primary} />
+                    ) : (
+                        <>
+                            {/* What it does */}
+                            <InfoSection
+                                icon="information-outline"
+                                iconColor={COLORS.primary}
+                                iconBg={COLORS.successBg}
+                                title="What it does"
+                            >
+                                <Text style={card.bodyText}>{data.whatItDoes}</Text>
+                            </InfoSection>
 
-                    {/* Side Effects */}
-                    <InfoSection icon="alert-outline" iconColor={COLORS.warningText} iconBg={COLORS.warningBg} title="Common side effects">
-                        <View style={{ gap: 4 }}>
-                            {medicine.sideEffects.map((s, i) => (
-                                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                    <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.warningText }} />
-                                    <Text style={card.bodyText}>{s}</Text>
-                                </View>
-                            ))}
-                        </View>
-                    </InfoSection>
+                            {/* Side Effects */}
+                            <InfoSection
+                                icon="alert-outline"
+                                iconColor={COLORS.warningText}
+                                iconBg={COLORS.warningBg}
+                                title="Common side effects"
+                            >
+                                {data.sideEffects?.length ? (
+                                    data.sideEffects.map((s, i) => (
+                                        <Text key={i} style={card.bodyText}>• {s}</Text>
+                                    ))
+                                ) : (
+                                    <Text style={card.bodyText}>No known side effects</Text>
+                                )}
+                            </InfoSection>
 
-                    {/* Food Interactions */}
-                    <InfoSection icon="food-off" iconColor={COLORS.dangerText} iconBg={COLORS.dangerBg} title="Food interactions">
-                        <View style={{ gap: 6 }}>
-                            {medicine.foodInteractions.map((f, i) => (
-                                <View key={i} style={card.foodTag}>
-                                    <Text style={card.foodEmoji}>{f.emoji}</Text>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={card.foodName}>{f.food}</Text>
-                                        <Text style={card.foodWhy}>{f.reason}</Text>
-                                    </View>
-                                    <View style={[card.foodSeverity, { backgroundColor: f.severity === 'Avoid' ? COLORS.dangerBg : COLORS.warningBg }]}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: f.severity === 'Avoid' ? COLORS.dangerText : COLORS.warningText }}>
-                                            {f.severity}
+                            {/* Food Interactions */}
+                            <InfoSection
+                                icon="food-off"
+                                iconColor={COLORS.dangerText}
+                                iconBg={COLORS.dangerBg}
+                                title="Food interactions"
+                            >
+                                {data.foodInteractions?.length ? (
+                                    data.foodInteractions.map((f, i) => (
+                                        <Text key={i} style={card.bodyText}>
+                                            {f.food} — {f.reason}
                                         </Text>
-                                    </View>
+                                    ))
+                                ) : (
+                                    <Text style={card.bodyText}>No major food interactions</Text>
+                                )}
+                            </InfoSection>
+
+                            {/* Doctor Tip */}
+                            {data.doctorTip ? (
+                                <View style={card.tipBox}>
+                                    <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.primary} />
+                                    <Text style={card.tipText}>{data.doctorTip}</Text>
                                 </View>
-                            ))}
-                        </View>
-                    </InfoSection>
+                            ) : null}
 
-                    {/* Generic Alternatives */}
-                    {medicine.generics && medicine.generics.length > 0 && (
-                        <InfoSection icon="currency-inr" iconColor={COLORS.primary} iconBg={COLORS.successBg} title="Cheaper generic alternatives">
-                            <View style={{ gap: 8 }}>
-                                {medicine.generics.map((g, i) => (
-                                    <View key={i} style={card.genericRow}>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={card.genericName}>{g.name}</Text>
-                                            <Text style={card.genericMaker}>{g.manufacturer}</Text>
-                                        </View>
-                                        <View style={card.savingsBadge}>
-                                            <Text style={card.originalPrice}>₹{g.originalPrice}</Text>
-                                            <Text style={card.genericPrice}>₹{g.genericPrice}</Text>
-                                        </View>
-                                        <View style={card.savePct}>
-                                            <Text style={card.savePctText}>Save {g.savingPct}%</Text>
-                                        </View>
+                            {/* Generics */}
+                            {data.generics?.length > 0 && (
+                                <View style={{ marginTop: 20 }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <Text style={sec.title}>Lower Cost Alternatives</Text>
+                                        {data.approximatePrice ? (
+                                            <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1' }}>
+                                                <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 2 }}>CURRENT PRICE</Text>
+                                                <Text style={{ fontSize: 18, fontWeight: '900', color: COLORS.textPrimary }}>₹{data.approximatePrice}</Text>
+                                            </View>
+                                        ) : null}
                                     </View>
-                                ))}
-                                <Text style={card.genericDisclaimer}>
-                                    * Generic medicines contain identical active ingredients. Ask your pharmacist before switching.
-                                </Text>
-                            </View>
-                        </InfoSection>
+                                    {data.generics.map((g, i) => (
+                                        <View key={i} style={[card.genericRow, { marginBottom: 10 }]}>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={card.genericName}>{g.name}</Text>
+                                                <Text style={card.genericMaker}>{g.manufacturer}</Text>
+                                            </View>
+                                            <View style={card.savingsBadge}>
+                                                <Text style={card.originalPrice}>₹{g.originalPrice}</Text>
+                                                <Text style={card.genericPrice}>₹{g.genericPrice}</Text>
+                                                <View style={card.savePct}>
+                                                    <Text style={card.savePctText}>{g.savingPct}% Less</Text>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    ))}
+                                    <Text style={card.genericDisclaimer}>* Prices are estimates for India. Consult your pharmacist.</Text>
+                                </View>
+                            )}
+                        </>
                     )}
-
-                    {/* Doctor tip */}
-                    <View style={card.tipBox}>
-                        <Ionicons name="chatbubble-ellipses-outline" size={16} color={COLORS.primary} />
-                        <Text style={card.tipText}>{medicine.doctorTip}</Text>
-                    </View>
                 </View>
             )}
         </View>
@@ -259,6 +326,9 @@ const SAMPLE_MEDICINES = [
 export default function MedicineExplainerScreen({ navigate, user, medicines: propMedicines }) {
     const [medicines, setMedicines] = React.useState(propMedicines || SAMPLE_MEDICINES);
     const [loading, setLoading] = React.useState(!propMedicines && !!user?.id);
+    const [searchQuery, setSearchQuery] = React.useState('');
+    const [globalSearchLoading, setGlobalSearchLoading] = React.useState(false);
+    const [globalResult, setGlobalResult] = React.useState(null);
     const [country, setCountry] = React.useState('India');
 
     React.useEffect(() => {
@@ -267,25 +337,69 @@ export default function MedicineExplainerScreen({ navigate, user, medicines: pro
         }
     }, [user]);
 
+    const handleGlobalSearch = async () => {
+        if (!searchQuery.trim()) return;
+        try {
+            setGlobalSearchLoading(true);
+            setGlobalResult(null);
+
+            const res = await fetch(`${API_URL}api/medications/search-explain?name=${encodeURIComponent(searchQuery)}`);
+            const data = await res.json();
+
+            if (data && data.explanation) {
+                const cached = data.explanation;
+                setGlobalResult({
+                    name: data.medicine || searchQuery,
+                    class: cached.medicine_class || 'General Medicine',
+                    dose: 'Information only',
+                    confidence: 'AI Search',
+                    tags: ['Generic Available'],
+                    whatItDoes: cached.what_it_does || 'No summary available.',
+                    sideEffects: cached.side_effects || [],
+                    foodInteractions: cached.food_interactions || [],
+                    generics: cached.generics || [],
+                    doctorTip: cached.doctor_tip || cached.important_warning,
+                    approximatePrice: cached.approximate_price,
+                    _id: 'search_' + Date.now()
+                });
+            }
+        } catch (e) {
+            console.error("Global search error:", e);
+        } finally {
+            setGlobalSearchLoading(false);
+        }
+    };
+
     const loadMedicinesFromBackend = async () => {
         try {
             const res = await fetch(`${API_URL}api/medications?user_id=${user.id}`);
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
                 // Map backend medications to our display format
-                const mapped = data.map((med, i) => ({
-                    name: med.name,
-                    class: 'Prescription Medicine',
-                    dose: med.dose || 'As prescribed',
-                    confidence: 'High',
-                    tags: ['Prescribed', med.dose ? 'Dosed' : 'Rx'].filter(Boolean),
-                    whatItDoes: 'Tap the ⓘ detail button to load full AI explanation for this medicine.',
-                    sideEffects: ['Loading...'],
-                    foodInteractions: [],
-                    generics: [],
-                    doctorTip: '"Always take this medicine exactly as prescribed by your doctor."',
-                    _id: med.id, // store for later AI explain
-                }));
+                const mapped = data.map((med, i) => {
+                    let cached = {};
+                    if (med.explanation_json) {
+                        try {
+                            const parsed = JSON.parse(med.explanation_json);
+                            cached = parsed.explanation || {};
+                        } catch (e) { }
+                    }
+
+                    return {
+                        name: med.name,
+                        class: cached.medicine_class || 'Prescription Medicine',
+                        dose: med.dose || 'As prescribed',
+                        confidence: cached.medicine_class ? 'High' : 'High',
+                        tags: ['Prescribed', med.dose ? 'Dosed' : 'Rx'].filter(Boolean),
+                        whatItDoes: cached.what_it_does || 'Tap the ⓘ detail button to load full AI explanation for this medicine.',
+                        sideEffects: cached.side_effects || ['Loading...'],
+                        foodInteractions: cached.food_interactions || [],
+                        generics: cached.generics || [],
+                        doctorTip: cached.doctor_tip || '"Always take this medicine exactly as prescribed by your doctor."',
+                        approximatePrice: cached.approximate_price || "",
+                        _id: med.id,
+                    };
+                });
                 setMedicines(mapped);
             }
         } catch (e) {
@@ -328,6 +442,33 @@ export default function MedicineExplainerScreen({ navigate, user, medicines: pro
                         </View>
                     ))}
                 </ScrollView>
+
+                {/* Search Bar */}
+                <View style={styles.searchSection}>
+                    <View style={styles.searchBar}>
+                        <Feather name="search" size={18} color={COLORS.textMuted} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search any medicine name..."
+                            placeholderTextColor={COLORS.textMuted}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            onSubmitEditing={handleGlobalSearch}
+                        />
+                        {searchQuery ? (
+                            <TouchableOpacity onPress={() => { setSearchQuery(''); setGlobalResult(null); }}>
+                                <Feather name="x" size={16} color={COLORS.textMuted} />
+                            </TouchableOpacity>
+                        ) : null}
+                    </View>
+                    <TouchableOpacity style={styles.searchBtn} onPress={handleGlobalSearch}>
+                        {globalSearchLoading ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                            <Text style={styles.searchBtnText}>Search</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
             </LinearGradient>
 
             {loading ? (
@@ -337,7 +478,17 @@ export default function MedicineExplainerScreen({ navigate, user, medicines: pro
                 </View>
             ) : (
                 <ScrollView contentContainerStyle={{ paddingTop: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-                    {medicines.map((med, i) => (
+
+                    {globalResult && (
+                        <View style={styles.searchResultsContainer}>
+                            <Text style={styles.searchResultTitle}>AI SEARCH RESULT</Text>
+                            <MedicineCard medicine={globalResult} index={0} />
+                            <View style={styles.searchDivider} />
+                        </View>
+                    )}
+
+                    <Text style={styles.listTitle}>{globalResult ? 'YOUR MEDICINES' : 'MY MEDICINES'}</Text>
+                    {medicines.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase())).map((med, i) => (
                         <MedicineCard key={i} medicine={med} index={i} />
                     ))}
 
@@ -387,4 +538,26 @@ const styles = StyleSheet.create({
         backgroundColor: COLORS.lightGray, borderRadius: 14,
     },
     disclaimerText: { flex: 1, fontSize: 12, color: COLORS.textMuted, lineHeight: 18 },
+
+    // Search Styles
+    searchSection: {
+        flexDirection: 'row', gap: 10, paddingHorizontal: 20,
+        marginTop: 16, marginBottom: 8, alignItems: 'center'
+    },
+    searchBar: {
+        flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10,
+        backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12,
+        height: 44, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)'
+    },
+    searchInput: { flex: 1, color: '#fff', fontSize: 14, fontWeight: '600' },
+    searchBtn: {
+        backgroundColor: '#fff', height: 44, paddingHorizontal: 16,
+        borderRadius: 12, justifyContent: 'center', alignItems: 'center'
+    },
+    searchBtnText: { color: COLORS.primary, fontWeight: '800', fontSize: 13 },
+
+    searchResultsContainer: { paddingHorizontal: 20, marginBottom: 20 },
+    searchResultTitle: { fontSize: 11, fontWeight: '800', color: COLORS.primary, marginBottom: 10, letterSpacing: 1 },
+    searchDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 20 },
+    listTitle: { fontSize: 11, fontWeight: '800', color: COLORS.textMuted, marginLeft: 20, marginBottom: 12, letterSpacing: 1 },
 });

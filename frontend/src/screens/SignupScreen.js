@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, TouchableOpacity,
-  SafeAreaView, KeyboardAvoidingView, Platform, ScrollView, 
+  SafeAreaView, KeyboardAvoidingView, Platform, ScrollView,
   ActivityIndicator, StatusBar, Dimensions, Animated, PanResponder
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,7 +18,7 @@ const THEME = {
   text: '#111827',
   textLight: '#6B7280',
   border: '#E5E7EB',
-  focusedBorder: '#14B8A6', 
+  focusedBorder: '#14B8A6',
   white: '#FFFFFF',
   shadowGlow: 'rgba(20, 184, 166, 0.15)',
 };
@@ -74,7 +74,7 @@ const BackgroundShapes = ({ mouseX, mouseY }) => {
           style={{ flex: 1, borderRadius: 1000 }}
         />
       </Animated.View>
-      
+
       <Animated.View style={[styles.bgGlowBottom, bottomTransform]}>
         <LinearGradient
           colors={['transparent', '#BFDBFE', '#A7F3D0']}
@@ -85,7 +85,7 @@ const BackgroundShapes = ({ mouseX, mouseY }) => {
   );
 };
 
-export default function SignupScreen({ navigate, setUser }) {
+export default function SignupScreen({ navigate, goBack, setUser }) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -186,25 +186,25 @@ export default function SignupScreen({ navigate, setUser }) {
   return (
     <LinearGradient colors={THEME.background} style={styles.container}>
       <StatusBar barStyle="dark-content" transparent backgroundColor="transparent" />
-      
+
       {/* Interactive Layer */}
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
         <BackgroundShapes mouseX={mouseX} mouseY={mouseY} />
       </View>
 
       <SafeAreaView style={{ flex: 1 }} pointerEvents="box-none">
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
           pointerEvents="box-none"
         >
-          <ScrollView 
-            contentContainerStyle={styles.scrollContent} 
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
-            pointerEvents="box-none" 
+            pointerEvents="box-none"
           >
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigate('LANDING')} style={styles.backButton}>
+              <TouchableOpacity onPress={goBack} style={styles.backButton}>
                 <Feather name="chevron-left" size={26} color={THEME.textLight} />
               </TouchableOpacity>
               <Text style={styles.headerIndicator}>Step {step} of 2</Text>
@@ -213,15 +213,15 @@ export default function SignupScreen({ navigate, setUser }) {
             <View style={styles.introSection}>
               <Text style={styles.title}>{step === 1 ? 'Start Your Care' : 'Verify Email'}</Text>
               <Text style={styles.subtitle}>
-                {step === 1 
-                  ? 'Join PrescribePal for intelligent healthcare support.' 
+                {step === 1
+                  ? 'Join PrescribePal for intelligent healthcare support.'
                   : `Please check your Email (${email}) for the code.`}
               </Text>
             </View>
 
             <View style={styles.card}>
               <Text style={styles.cardHeader}>{step === 1 ? 'Personal Details' : 'Identity Verification'}</Text>
-              
+
               {errorMsg && (
                 <View style={{ marginBottom: 16 }}>
                   <Text style={{ color: THEME.error || '#F43F5E', fontSize: 13 }}>{errorMsg}</Text>
@@ -231,90 +231,90 @@ export default function SignupScreen({ navigate, setUser }) {
               {step === 1 ? (
                 <>
                   <View style={styles.inputWrapper}>
-                <Text style={styles.label}>Full Name</Text>
-                <View style={[styles.inputContainer, focusedField === 'name' && styles.inputActive]}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="E.g. Dr. Anya Sharma"
-                    placeholderTextColor="#A1A1AA"
-                    onFocus={() => setFocusedField('name')}
-                    onBlur={() => setFocusedField(null)}
-                    onChangeText={setName}
-                    value={name}
-                  />
-                </View>
-              </View>
+                    <Text style={styles.label}>Full Name</Text>
+                    <View style={[styles.inputContainer, focusedField === 'name' && styles.inputActive]}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="E.g. Dr. Anya Sharma"
+                        placeholderTextColor="#A1A1AA"
+                        onFocus={() => setFocusedField('name')}
+                        onBlur={() => setFocusedField(null)}
+                        onChangeText={setName}
+                        value={name}
+                      />
+                    </View>
+                  </View>
 
-              <View style={[styles.inputWrapper, { marginTop: 16 }]}>
-                <Text style={styles.label}>Work Email</Text>
-                <View style={[styles.inputContainer, focusedField === 'email' && styles.inputActive]}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="anya@clinic.io"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    placeholderTextColor="#A1A1AA"
-                    onFocus={() => setFocusedField('email')}
-                    onBlur={() => setFocusedField(null)}
-                    onChangeText={setEmail}
-                    value={email}
-                  />
-                </View>
-              </View>
+                  <View style={[styles.inputWrapper, { marginTop: 16 }]}>
+                    <Text style={styles.label}>Work Email</Text>
+                    <View style={[styles.inputContainer, focusedField === 'email' && styles.inputActive]}>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="anya@clinic.io"
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                        placeholderTextColor="#A1A1AA"
+                        onFocus={() => setFocusedField('email')}
+                        onBlur={() => setFocusedField(null)}
+                        onChangeText={setEmail}
+                        value={email}
+                      />
+                    </View>
+                  </View>
 
-              <View style={[styles.inputWrapper, { marginTop: 16 }]}>
-                <Text style={styles.label}>Password</Text>
-                <View style={[styles.inputContainer, focusedField === 'password' && styles.inputActive]}>
-                  <TextInput
-                    style={styles.input}
-                    secureTextEntry={!showPassword}
-                    placeholder="At least 8 characters"
-                    placeholderTextColor="#A1A1AA"
-                    onFocus={() => setFocusedField('password')}
-                    onBlur={() => setFocusedField(null)}
-                    onChangeText={setPassword}
-                    value={password}
-                  />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                    <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={THEME.textLight} />
+                  <View style={[styles.inputWrapper, { marginTop: 16 }]}>
+                    <Text style={styles.label}>Password</Text>
+                    <View style={[styles.inputContainer, focusedField === 'password' && styles.inputActive]}>
+                      <TextInput
+                        style={styles.input}
+                        secureTextEntry={!showPassword}
+                        placeholder="At least 8 characters"
+                        placeholderTextColor="#A1A1AA"
+                        onFocus={() => setFocusedField('password')}
+                        onBlur={() => setFocusedField(null)}
+                        onChangeText={setPassword}
+                        value={password}
+                      />
+                      <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                        <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={THEME.textLight} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {password.length > 0 && (
+                    <View style={styles.strengthCont}>
+                      {[1, 2, 3].map((i) => (
+                        <View key={i} style={[styles.strengthBar, i <= getStrength() && { backgroundColor: getStrength() === 3 ? THEME.primary : '#FBBF24' }]} />
+                      ))}
+                      <Text style={styles.strengthText}>
+                        {getStrength() === 1 ? 'Weak' : getStrength() === 2 ? 'Good' : 'Strong'}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={[styles.inputWrapper, { marginTop: 16 }]}>
+                    <Text style={styles.label}>Confirm Password</Text>
+                    <View style={[styles.inputContainer, focusedField === 'confirm' && styles.inputActive]}>
+                      <TextInput
+                        style={styles.input}
+                        secureTextEntry={!showPassword}
+                        placeholder="Repeat your password"
+                        placeholderTextColor="#A1A1AA"
+                        onFocus={() => setFocusedField('confirm')}
+                        onBlur={() => setFocusedField(null)}
+                        onChangeText={setConfirmPassword}
+                        value={confirmPassword}
+                      />
+                    </View>
+                  </View>
+
+                  <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed(!agreed)}>
+                    <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
+                      {agreed && <Feather name="check" size={12} color="#FFF" />}
+                    </View>
+                    <Text style={styles.termsText}>I agree to the <Text style={styles.linkText}>Terms & Privacy</Text></Text>
                   </TouchableOpacity>
-                </View>
-              </View>
-
-              {password.length > 0 && (
-                <View style={styles.strengthCont}>
-                  {[1, 2, 3].map((i) => (
-                    <View key={i} style={[styles.strengthBar, i <= getStrength() && { backgroundColor: getStrength() === 3 ? THEME.primary : '#FBBF24' }]} />
-                  ))}
-                  <Text style={styles.strengthText}>
-                    {getStrength() === 1 ? 'Weak' : getStrength() === 2 ? 'Good' : 'Strong'}
-                  </Text>
-                </View>
-              )}
-
-              <View style={[styles.inputWrapper, { marginTop: 16 }]}>
-                <Text style={styles.label}>Confirm Password</Text>
-                <View style={[styles.inputContainer, focusedField === 'confirm' && styles.inputActive]}>
-                  <TextInput
-                    style={styles.input}
-                    secureTextEntry={!showPassword}
-                    placeholder="Repeat your password"
-                    placeholderTextColor="#A1A1AA"
-                    onFocus={() => setFocusedField('confirm')}
-                    onBlur={() => setFocusedField(null)}
-                    onChangeText={setConfirmPassword}
-                    value={confirmPassword}
-                  />
-                </View>
-              </View>
-
-              <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed(!agreed)}>
-                <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
-                  {agreed && <Feather name="check" size={12} color="#FFF" />}
-                </View>
-                <Text style={styles.termsText}>I agree to the <Text style={styles.linkText}>Terms & Privacy</Text></Text>
-              </TouchableOpacity>
-              </>
+                </>
               ) : (
                 <View style={[styles.inputWrapper, { marginTop: 16 }]}>
                   <Text style={styles.label}>Verification Code (OTP)</Text>
@@ -333,13 +333,13 @@ export default function SignupScreen({ navigate, setUser }) {
                 </View>
               )}
 
-              <TouchableOpacity 
-                style={[styles.mainButton, (!agreed && step === 1) && { opacity: 0.5 }]} 
+              <TouchableOpacity
+                style={[styles.mainButton, (!agreed && step === 1) && { opacity: 0.5 }]}
                 onPress={step === 1 ? handleSignup : handleVerify}
                 disabled={loading}
               >
-                <LinearGradient 
-                  colors={[THEME.primary, '#0D9488']} 
+                <LinearGradient
+                  colors={[THEME.primary, '#0D9488']}
                   style={styles.gradient}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 >
@@ -368,21 +368,21 @@ export default function SignupScreen({ navigate, setUser }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  bgGlowTop: { 
-    position: 'absolute', 
-    top: -height * 0.1, 
-    right: -width * 0.1, 
-    width: width * 0.9, 
-    height: width * 0.9, 
-    opacity: 0.2 
+  bgGlowTop: {
+    position: 'absolute',
+    top: -height * 0.1,
+    right: -width * 0.1,
+    width: width * 0.9,
+    height: width * 0.9,
+    opacity: 0.2
   },
-  bgGlowBottom: { 
-    position: 'absolute', 
-    bottom: -height * 0.1, 
-    left: -width * 0.2, 
-    width: width * 1.1, 
-    height: width * 1.1, 
-    opacity: 0.15 
+  bgGlowBottom: {
+    position: 'absolute',
+    bottom: -height * 0.1,
+    left: -width * 0.2,
+    width: width * 1.1,
+    height: width * 1.1,
+    opacity: 0.15
   },
   scrollContent: { paddingHorizontal: 28, paddingBottom: 40, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 10 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, paddingVertical: 10 },
