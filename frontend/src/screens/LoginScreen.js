@@ -4,13 +4,14 @@ import {
   SafeAreaView, KeyboardAvoidingView, Platform, StatusBar, ActivityIndicator, ScrollView,
   Dimensions, Animated, PanResponder
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { API_URL } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
 const THEME = {
-  background: ['#FFFFFF', '#F0FDFA', '#EFF6FF'],
+  background: ['#E0F2FE', '#CCFBF1', '#D1FAE5'],
   glass: 'rgba(255, 255, 255, 0.6)',
   primary: '#14B8A6', 
   primaryDark: '#0D9488',
@@ -108,7 +109,24 @@ export default function LoginScreen({ navigate, setUser }) {
   const handleLogin = async () => {
     if (!email || !password) { setErrorMsg('Credentials required'); return; }
     setLoading(true);
-    setTimeout(() => { setLoading(false); navigate('DASHBOARD'); }, 1500);
+    try {
+      const res = await fetch(`${API_URL}api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: email, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (setUser) setUser(data.user);
+        navigate('DASHBOARD');
+      } else {
+        setErrorMsg(data.detail || 'Login failed');
+      }
+    } catch (err) {
+      setErrorMsg('Network Error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -131,14 +149,14 @@ export default function LoginScreen({ navigate, setUser }) {
 
             <View style={styles.introSection}>
               <Text style={styles.title}>Welcome Back</Text>
-              <Text style={styles.subtitle}>Sign in to continue your care journey.</Text>
+              <Text style={styles.subtitle}>Log in to continue your care journey.</Text>
             </View>
 
             <View style={styles.card}>
               <Text style={styles.cardHeader}>Login</Text>
               
               <View style={styles.inputWrapper}>
-                <Text style={styles.label}>Work Email</Text>
+                <Text style={styles.label}>Email</Text>
                 <View style={[styles.inputContainer, focusedField === 'email' && styles.inputActive]}>
                   <TextInput
                     style={styles.input}
@@ -176,7 +194,7 @@ export default function LoginScreen({ navigate, setUser }) {
 
               <TouchableOpacity style={styles.mainButton} onPress={handleLogin} disabled={loading}>
                 <LinearGradient colors={[THEME.primary, THEME.primaryDark]} style={styles.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
+                  {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Log In</Text>}
                 </LinearGradient>
               </TouchableOpacity>
             </View>

@@ -6,11 +6,12 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { API_URL } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
 const THEME = {
-  background: ['#FFFFFF', '#F0FDFA', '#EFF6FF'],
+  background: ['#E0F2FE', '#CCFBF1', '#D1FAE5'],
   glass: 'rgba(255, 255, 255, 0.6)',
   primary: '#14B8A6',
   secondary: '#60A5FA',
@@ -95,6 +96,10 @@ export default function SignupScreen({ navigate, setUser }) {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [pendingUserId, setPendingUserId] = useState(null);
+  const [otp, setOtp] = useState('');
+
   const mouseX = useRef(new Animated.Value(0)).current;
   const mouseY = useRef(new Animated.Value(0)).current;
 
@@ -122,11 +127,60 @@ export default function SignupScreen({ navigate, setUser }) {
 
   const handleSignup = async () => {
     if (!name || !email || !password || !confirmPassword || !agreed) return;
+    if (password !== confirmPassword) {
+      setErrorMsg("Passwords do not match");
+      return;
+    }
+    setErrorMsg(null);
     setLoading(true);
-    setTimeout(() => { 
-        setLoading(false); 
-        setStep(2); 
-    }, 1500);
+
+    try {
+      const response = await fetch(`${API_URL}api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name: name, email, password })
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        setPendingUserId(data.user_id);
+        setStep(2);
+      } else {
+        setErrorMsg(data.detail || "Registration failed");
+      }
+    } catch (err) {
+      setErrorMsg("Network error connecting to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!otp) return;
+    setErrorMsg(null);
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: pendingUserId, otp })
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        if (setUser) {
+          setUser({ ...data.user, name: data.user.full_name, token: data.access_token });
+        }
+        navigate('DASHBOARD');
+      } else {
+        setErrorMsg(data.detail || "Invalid code");
+      }
+    } catch (err) {
+      setErrorMsg("Network error connecting to server");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -161,14 +215,22 @@ export default function SignupScreen({ navigate, setUser }) {
               <Text style={styles.subtitle}>
                 {step === 1 
                   ? 'Join PrescribePal for intelligent healthcare support.' 
-                  : `Please check your work email (${email}) for the code.`}
+                  : `Please check your Email (${email}) for the code.`}
               </Text>
             </View>
 
             <View style={styles.card}>
               <Text style={styles.cardHeader}>{step === 1 ? 'Personal Details' : 'Identity Verification'}</Text>
               
-              <View style={styles.inputWrapper}>
+              {errorMsg && (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ color: THEME.error || '#F43F5E', fontSize: 13 }}>{errorMsg}</Text>
+                </View>
+              )}
+
+              {step === 1 ? (
+                <>
+                  <View style={styles.inputWrapper}>
                 <Text style={styles.label}>Full Name</Text>
                 <View style={[styles.inputContainer, focusedField === 'name' && styles.inputActive]}>
                   <TextInput
@@ -252,10 +314,28 @@ export default function SignupScreen({ navigate, setUser }) {
                 </View>
                 <Text style={styles.termsText}>I agree to the <Text style={styles.linkText}>Terms & Privacy</Text></Text>
               </TouchableOpacity>
+              </>
+              ) : (
+                <View style={[styles.inputWrapper, { marginTop: 16 }]}>
+                  <Text style={styles.label}>Verification Code (OTP)</Text>
+                  <View style={[styles.inputContainer, focusedField === 'otp' && styles.inputActive]}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="6-digit code"
+                      placeholderTextColor="#A1A1AA"
+                      keyboardType="number-pad"
+                      onFocus={() => setFocusedField('otp')}
+                      onBlur={() => setFocusedField(null)}
+                      onChangeText={setOtp}
+                      value={otp}
+                    />
+                  </View>
+                </View>
+              )}
 
               <TouchableOpacity 
                 style={[styles.mainButton, (!agreed && step === 1) && { opacity: 0.5 }]} 
-                onPress={step === 1 ? handleSignup : () => navigate('DASHBOARD')}
+                onPress={step === 1 ? handleSignup : handleVerify}
                 disabled={loading}
               >
                 <LinearGradient 
@@ -275,7 +355,7 @@ export default function SignupScreen({ navigate, setUser }) {
             <View style={styles.footer}>
               <Text style={styles.footerText}>Already part of PrescribePal? </Text>
               <TouchableOpacity onPress={() => navigate('LOGIN')}>
-                <Text style={styles.footerLink}>Sign In</Text>
+                <Text style={styles.footerLink}>Log In</Text>
               </TouchableOpacity>
             </View>
 
