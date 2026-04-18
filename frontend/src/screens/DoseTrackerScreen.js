@@ -32,6 +32,13 @@ export default function DoseTrackerScreen({ user, currentScreen }) {
     const [addingMed, setAddingMed] = useState(false);
     const [newName, setNewName] = useState('');
     const [newDose, setNewDose] = useState('');
+    const [newHour, setNewHour] = useState('08');
+    const [newMin, setNewMin] = useState('00');
+    const [newAmPm, setNewAmPm] = useState('AM');
+    const [editingTimeId, setEditingTimeId] = useState(null);
+    const [editHour, setEditHour] = useState('');
+    const [editMin, setEditMin] = useState('');
+    const [editAmPm, setEditAmPm] = useState('');
     const week = generateWeek();
     const progressAnim = useRef(new Animated.Value(0)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -69,14 +76,21 @@ export default function DoseTrackerScreen({ user, currentScreen }) {
 
     const handleAddMed = async () => {
         if (!newName || !newDose) return;
+        const timeStr = `${newHour}:${newMin} ${newAmPm}`;
         try {
             const response = await fetch(`${API_URL}api/medications`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: user.id, name: newName, dose: newDose }),
+                body: JSON.stringify({
+                    user_id: user.id,
+                    name: newName,
+                    dose: newDose,
+                    times: [{ label: 'Scheduled', time: timeStr, icon: 'pill' }]
+                }),
             });
             if (response.ok) {
                 setAddingMed(false); setNewName(''); setNewDose('');
+                setNewHour('08'); setNewMin('00'); setNewAmPm('AM');
                 fetchMeds();
             }
         } catch (err) { console.error('Failed to add med:', err); }
@@ -87,6 +101,30 @@ export default function DoseTrackerScreen({ user, currentScreen }) {
             const response = await fetch(`${API_URL}api/medications/${medId}`, { method: 'DELETE' });
             if (response.ok) fetchMeds();
         } catch (err) { console.error('Failed to delete med:', err); }
+    };
+
+    const handleUpdateTime = async (medId, timeId) => {
+        const timeStr = `${editHour}:${editMin} ${editAmPm}`;
+        try {
+            const response = await fetch(`${API_URL}api/medications/${medId}/times/${timeId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ time: timeStr }),
+            });
+            if (response.ok) {
+                setEditingTimeId(null);
+                fetchMeds();
+            }
+        } catch (err) { console.error('Failed to update time:', err); }
+    };
+
+    const startEditing = (t) => {
+        const [time, ampm] = t.time.split(' ');
+        const [h, m] = time.split(':');
+        setEditHour(h);
+        setEditMin(m);
+        setEditAmPm(ampm);
+        setEditingTimeId(t.id);
     };
 
     const progressWidth = progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
@@ -184,6 +222,45 @@ export default function DoseTrackerScreen({ user, currentScreen }) {
                                 />
                             </View>
                         </View>
+
+                        <View style={styles.timeEditorRow}>
+                            <Text style={styles.timeEditorLabel}>Reminder Time:</Text>
+                            <View style={styles.timeInputs}>
+                                <View style={styles.timeUnit}>
+                                    <TextInput
+                                        style={styles.timeUnitInput}
+                                        keyboardType="numeric"
+                                        maxLength={2}
+                                        value={newHour}
+                                        onChangeText={setNewHour}
+                                    />
+                                </View>
+                                <Text style={styles.timeSeparator}>:</Text>
+                                <View style={styles.timeUnit}>
+                                    <TextInput
+                                        style={styles.timeUnitInput}
+                                        keyboardType="numeric"
+                                        maxLength={2}
+                                        value={newMin}
+                                        onChangeText={setNewMin}
+                                    />
+                                </View>
+                                <View style={styles.ampmToggle}>
+                                    <TouchableOpacity 
+                                        style={[styles.ampmBtn, newAmPm === 'AM' && styles.ampmBtnActive]}
+                                        onPress={() => setNewAmPm('AM')}
+                                    >
+                                        <Text style={[styles.ampmBtnText, newAmPm === 'AM' && styles.ampmBtnTextActive]}>AM</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        style={[styles.ampmBtn, newAmPm === 'PM' && styles.ampmBtnActive]}
+                                        onPress={() => setNewAmPm('PM')}
+                                    >
+                                        <Text style={[styles.ampmBtnText, newAmPm === 'PM' && styles.ampmBtnTextActive]}>PM</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </View>
                         <TouchableOpacity onPress={handleAddMed} activeOpacity={0.85}>
                             <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.saveBtn}>
                                 <Text style={styles.saveBtnText}>Save Medication</Text>
@@ -212,29 +289,87 @@ export default function DoseTrackerScreen({ user, currentScreen }) {
                             </View>
 
                             {(med.times || []).map(t => (
-                                <TouchableOpacity
+                                <View
                                     key={t.id}
                                     style={[styles.doseRow, t.taken && styles.doseRowDone]}
-                                    onPress={() => toggleDose(med.id, t.id)}
-                                    activeOpacity={0.7}
                                 >
-                                    <View style={[styles.timeIcon, { backgroundColor: (med.colorBg || COLORS.successBg) }]}>
-                                        <MaterialCommunityIcons name={t.icon || 'pill'} size={18} color={med.color || COLORS.primary} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.doseTime, t.taken && styles.doseTimeDone]}>{t.time}</Text>
-                                        <Text style={styles.doseLabel}>{t.label}</Text>
-                                    </View>
-                                    <View style={[
-                                        styles.checkCircle,
-                                        t.taken && { backgroundColor: med.color || COLORS.primary, borderColor: med.color || COLORS.primary },
-                                    ]}>
-                                        {t.taken
-                                            ? <Feather name="check" size={13} color="#fff" />
-                                            : <View style={styles.checkCircleInner} />
-                                        }
-                                    </View>
-                                </TouchableOpacity>
+                                    {editingTimeId === t.id ? (
+                                        <View style={[styles.doseMainArea, { backgroundColor: '#fff' }]}>
+                                            <View style={[styles.timeIcon, { backgroundColor: (med.colorBg || COLORS.successBg) }]}>
+                                                <MaterialCommunityIcons name={t.icon || 'pill'} size={18} color={med.color || COLORS.primary} />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <View style={styles.inlineEditor}>
+                                                    <View style={styles.inlineInputs}>
+                                                        <TextInput 
+                                                            style={styles.inlineInput} 
+                                                            value={editHour} 
+                                                            onChangeText={setEditHour}
+                                                            keyboardType="numeric"
+                                                            maxLength={2}
+                                                        />
+                                                        <Text style={styles.inlineSeparator}>:</Text>
+                                                        <TextInput 
+                                                            style={styles.inlineInput} 
+                                                            value={editMin} 
+                                                            onChangeText={setEditMin}
+                                                            keyboardType="numeric"
+                                                            maxLength={2}
+                                                        />
+                                                        <TouchableOpacity 
+                                                            onPress={() => setEditAmPm(editAmPm === 'AM' ? 'PM' : 'AM')}
+                                                            style={styles.inlineAmPm}
+                                                        >
+                                                            <Text style={styles.inlineAmPmText}>{editAmPm}</Text>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                    <TouchableOpacity onPress={() => handleUpdateTime(med.id, t.id)} style={styles.inlineSave}>
+                                                        <Feather name="check" size={16} color={COLORS.primary} />
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity onPress={() => setEditingTimeId(null)} style={styles.inlineCancel}>
+                                                        <Feather name="x" size={16} color={COLORS.textMuted} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                                <Text style={styles.doseLabel}>{t.label}</Text>
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity
+                                            style={styles.doseMainArea}
+                                            onPress={() => toggleDose(med.id, t.id)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <View style={[styles.timeIcon, { backgroundColor: (med.colorBg || COLORS.successBg) }]}>
+                                                <MaterialCommunityIcons name={t.icon || 'pill'} size={18} color={med.color || COLORS.primary} />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <View style={styles.doseTimeRow}>
+                                                    <Text style={[styles.doseTime, t.taken && styles.doseTimeDone]}>{t.time}</Text>
+                                                    <TouchableOpacity onPress={() => startEditing(t)} style={styles.editTimeBtn}>
+                                                        <Feather name="edit-2" size={12} color={COLORS.textMuted} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                                <Text style={styles.doseLabel}>{t.label}</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    )}
+
+                                    {editingTimeId !== t.id && (
+                                        <TouchableOpacity 
+                                            onPress={() => toggleDose(med.id, t.id)}
+                                            activeOpacity={0.7}
+                                            style={[
+                                                styles.checkCircle,
+                                                t.taken && { backgroundColor: med.color || COLORS.primary, borderColor: med.color || COLORS.primary },
+                                            ]}
+                                        >
+                                            {t.taken
+                                                ? <Feather name="check" size={13} color="#fff" />
+                                                : <View style={styles.checkCircleInner} />
+                                            }
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
                             ))}
                         </View>
                     ))}
@@ -322,6 +457,43 @@ const styles = StyleSheet.create({
         paddingVertical: 11, borderWidth: 1, borderColor: COLORS.border,
     },
     addInputText: { fontSize: 14, color: COLORS.textPrimary },
+    
+    timeEditorRow: { 
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        backgroundColor: COLORS.lightGray, borderRadius: 12, padding: 12,
+        borderWidth: 1, borderColor: COLORS.border,
+    },
+    timeEditorLabel: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary },
+    timeInputs: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    timeUnit: { 
+        backgroundColor: '#fff', borderRadius: 8, width: 40, height: 36,
+        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border,
+    },
+    timeUnitInput: { fontSize: 15, fontWeight: '800', color: COLORS.textPrimary, textAlign: 'center' },
+    timeSeparator: { fontSize: 16, fontWeight: '900', color: COLORS.textSecondary },
+    ampmToggle: { 
+        flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, 
+        padding: 2, borderWidth: 1, borderColor: COLORS.border, marginLeft: 4,
+    },
+    ampmBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+    ampmBtnActive: { backgroundColor: COLORS.primary },
+    ampmBtnText: { fontSize: 11, fontWeight: '800', color: COLORS.textSecondary },
+    ampmBtnTextActive: { color: '#fff' },
+
+    doseTimeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    editTimeBtn: { padding: 4 },
+    inlineEditor: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    inlineInputs: { 
+        flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lightGray, 
+        borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: COLORS.border,
+    },
+    inlineInput: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary, width: 24, textAlign: 'center' },
+    inlineSeparator: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary },
+    inlineAmPm: { marginLeft: 4, paddingHorizontal: 4 },
+    inlineAmPmText: { fontSize: 12, fontWeight: '800', color: COLORS.primary },
+    inlineSave: { padding: 4, backgroundColor: COLORS.primaryGlow, borderRadius: 6 },
+    inlineCancel: { padding: 4 },
+
     saveBtn: { paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
     saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
@@ -353,6 +525,7 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1, borderBottomColor: COLORS.border,
     },
     doseRowDone: { opacity: 0.6 },
+    doseMainArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 },
     timeIcon: { width: 40, height: 40, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
     doseTime: { fontSize: 15, fontWeight: '800', color: COLORS.textPrimary },
     doseTimeDone: { textDecorationLine: 'line-through', color: COLORS.textSecondary },
