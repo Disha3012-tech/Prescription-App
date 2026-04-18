@@ -46,10 +46,43 @@ async def create_medication(req: schemas.MedicationCreate, db: Session = Depends
             )
             db.add(db_time)
     else:
-        # Default: Morning and Evening
-        t1 = models.MedicationTime(medication_id=new_med.id, label="Morning", time="8:00 AM", taken=False, icon="weather-sunny")
-        t2 = models.MedicationTime(medication_id=new_med.id, label="Evening", time="8:00 PM", taken=False, icon="weather-sunset")
-        db.add_all([t1, t2])
+        # Ask LLM for the schedule
+        from ..llm import call_llm
+        import json, re
+        prompt = f"""
+        A patient just manually added a medicine. 
+        Medicine name: {req.name}
+        Dose/Instructions provided: {req.dose}
+
+        Determine the most clinically appropriate precise schedule (exact best times) and clear labels. 
+        Do not just output 8 AM/8 PM unless genuinely optimal.
+        
+        Return ONLY valid JSON in this format:
+        [
+          {{"time": "HH:MM AM/PM", "label": "Clinical instruction (e.g., With Dinner)", "icon": "weather-sunny"}}
+        ]
+        """
+        try:
+            raw = call_llm(prompt)
+            match = re.search(r'\[.*\]', raw, re.DOTALL)
+            schedule = json.loads(match.group()) if match else None
+            
+            if schedule and isinstance(schedule, list):
+                for s in schedule:
+                    db_time = models.MedicationTime(
+                        medication_id=new_med.id,
+                        label=s.get("label", "Dose"),
+                        time=s.get("time", "12:00 PM"),
+                        icon=s.get("icon", "pill")
+                    )
+                    db.add(db_time)
+            else:
+                raise Exception("Fallback to generic schedule needed")
+        except Exception as e:
+            print("Failed to generate schedule from LLM:", e)
+            t1 = models.MedicationTime(medication_id=new_med.id, label="Morning Dose", time="08:00 AM", taken=False, icon="weather-sunny")
+            t2 = models.MedicationTime(medication_id=new_med.id, label="Evening Dose", time="08:00 PM", taken=False, icon="weather-sunset")
+            db.add_all([t1, t2])
     
     db.commit()
     db.refresh(new_med)
@@ -109,10 +142,36 @@ async def explain_medication(medication_id: str, country: str = "India", currenc
     if not med:
         raise HTTPException(status_code=404, detail="Medication not found")
     
+    # Return cached if exists
+    if med.explanation_json:
+        try:
+            import json
+            return json.loads(med.explanation_json)
+        except:
+            pass
+
     try:
         from ..explain import explain_medicine
         result = explain_medicine(
             {"name": med.name, "dosage": med.dose},
+            country=country,
+            currency=currency
+        )
+        # Save to cache
+        import json
+        med.explanation_json = json.dumps(result)
+        db.commit()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/search-explain")
+async def search_explain_medication(name: str, country: str = "India", currency: str = "INR"):
+    """Search for any medicine and get AI explanation without a DB record"""
+    try:
+        from ..explain import explain_medicine
+        result = explain_medicine(
+            {"name": name, "dosage": "General information"},
             country=country,
             currency=currency
         )

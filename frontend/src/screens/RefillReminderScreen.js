@@ -150,7 +150,7 @@ const sp = StyleSheet.create({
 });
 
 // ─── Main Screen ────────────────────────────────────────────────────────────────
-export default function RefillReminderScreen({ user, navigate }) {
+export default function RefillReminderScreen({ user, navigate, goBack }) {
     const [meds, setMeds] = useState([]);
     const [loading, setLoading] = useState(true);
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -222,7 +222,7 @@ export default function RefillReminderScreen({ user, navigate }) {
             <LinearGradient colors={GRADIENTS.hero} style={styles.header}>
                 <View style={styles.bgDeco} />
                 <View style={styles.headerTop}>
-                    <TouchableOpacity onPress={() => navigate('DASHBOARD')} style={styles.backBtn}>
+                    <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
                         <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
                     <View style={{ flex: 1, paddingLeft: 14 }}>

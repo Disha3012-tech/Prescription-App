@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar,
 } from 'react-native';
@@ -78,20 +78,72 @@ const SCREEN_TITLES = {
 const TAB_SCREENS = new Set(['DASHBOARD', 'SCANNER', 'DRUG_INTERACTION', 'DOSE_TRACKER', 'ASK_AI']);
 
 // Screens that need the shared header
-const NEEDS_HEADER = new Set(['HISTORY', 'PHARMACY', 'PROFILE', 'CONFIRM_MEDICINES', 'PRESCRIPTION_DETAIL']);
+const NEEDS_HEADER = new Set(['HISTORY', 'PHARMACY', 'PROFILE', 'CONFIRM_MEDICINES']);
 
 // Screens that manage their own full header (no shared back header)
-const SELF_HEADER = new Set(['PRESCRIPTION_TIMELINE', 'FAMILY_PROFILE', 'MEDICINE_EXPLAINER', 'REFILL_REMINDER', 'SYMPTOM_LOOKUP']);
+const SELF_HEADER = new Set(['PRESCRIPTION_TIMELINE', 'FAMILY_PROFILE', 'MEDICINE_EXPLAINER', 'REFILL_REMINDER', 'SYMPTOM_LOOKUP', 'PRESCRIPTION_DETAIL']);
 
 export default function App() {
   const [screen, setScreen] = useState('LANDING');
   const [user, setUser] = useState(null);
   const [routeParams, setRouteParams] = useState({});
+  const historyStack = useRef([{ screen: 'LANDING', params: {} }]);
 
   const navigate = (s, params = {}) => {
+    historyStack.current.push({ screen: s, params });
     setScreen(s);
     setRouteParams(params);
+    if (typeof window !== 'undefined' && window.history) {
+      try {
+        window.history.pushState({ index: historyStack.current.length - 1 }, '', `?screen=${s}`);
+      } catch (e) {
+        console.error("pushState error:", e);
+      }
+    }
   };
+
+  const goBack = () => {
+    if (historyStack.current.length > 1) {
+      historyStack.current.pop(); // Remove current
+      const previous = historyStack.current[historyStack.current.length - 1];
+      setScreen(previous.screen);
+      setRouteParams(previous.params);
+
+      if (typeof window !== 'undefined' && window.history) {
+        try {
+          // We also need to keep the browser URL in sync, but window.history.back() will trigger popstate!
+          // If we just use our internal stack, let's just goBack without triggering a popstate that fights us.
+          window.history.replaceState({ index: historyStack.current.length - 1 }, '', `?screen=${previous.screen}`);
+        } catch (e) { }
+      }
+    } else {
+      setScreen(user ? 'DASHBOARD' : 'LANDING');
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      const handlePopState = (event) => {
+        // User clicked browser Back button
+        if (event.state && typeof event.state.index !== 'undefined') {
+          const index = event.state.index;
+          if (index < historyStack.current.length && index >= 0) {
+            // Trim stack to match this index
+            historyStack.current = historyStack.current.slice(0, index + 1);
+            const target = historyStack.current[index];
+            setScreen(target.screen);
+            setRouteParams(target.params || {});
+          }
+        }
+      };
+      window.addEventListener('popstate', handlePopState);
+
+      if (typeof window !== 'undefined' && window.history) {
+        window.history.replaceState({ index: 0 }, '', '?screen=LANDING');
+      }
+      return () => window.removeEventListener('popstate', handlePopState);
+    }
+  }, [user]);
 
   const handleSetUser = (u) => {
     setUser(u);
@@ -100,26 +152,26 @@ export default function App() {
   // ── Render current screen content ─────────────────────────────────────
   const renderScreen = () => {
     switch (screen) {
-      case 'LANDING': return <LandingScreen navigate={navigate} />;
-      case 'ONBOARDING': return <OnboardingScreen navigate={navigate} />;
-      case 'LOGIN': return <LoginScreen navigate={navigate} setUser={handleSetUser} />;
-      case 'SIGNUP': return <SignupScreen navigate={navigate} setUser={handleSetUser} />;
-      case 'DASHBOARD': return <DashboardScreen user={user} navigate={navigate} currentScreen={screen} />;
-      case 'SCANNER': return <ScannerScreen navigate={navigate} user={user} route={{ params: routeParams }} />;
-      case 'DRUG_INTERACTION': return <DrugInteractionScreen navigate={navigate} />;
-      case 'DOSE_TRACKER': return <DoseTrackerScreen user={user} navigate={navigate} currentScreen={screen} />;
-      case 'ASK_AI': return <AskAIScreen navigate={navigate} />;
-      case 'HISTORY': return <MedicalHistoryScreen user={user} navigate={navigate} />;
-      case 'PHARMACY': return <PharmacyScreen navigate={navigate} />;
-      case 'PROFILE': return <ProfileScreen user={user} setUser={handleSetUser} navigate={navigate} />;
-      case 'CONFIRM_MEDICINES': return <ConfirmMedicinesScreen route={{ params: routeParams }} navigation={{ navigate }} />;
-      case 'PRESCRIPTION_DETAIL': return <PrescriptionDetailScreen route={{ params: routeParams }} navigation={{ navigate }} />;
-      case 'PRESCRIPTION_TIMELINE': return <PrescriptionTimelineScreen user={user} navigate={navigate} />;
-      case 'FAMILY_PROFILE': return <FamilyProfileScreen user={user} navigate={navigate} />;
-      case 'MEDICINE_EXPLAINER': return <MedicineExplainerScreen navigate={navigate} user={user} medicines={routeParams.medicines} />;
-      case 'REFILL_REMINDER': return <RefillReminderScreen user={user} navigate={navigate} />;
-      case 'SYMPTOM_LOOKUP': return <SymptomLookupScreen navigate={navigate} user={user} />;
-      default: return <LandingScreen navigate={navigate} />;
+      case 'LANDING': return <LandingScreen navigate={navigate} goBack={goBack} />;
+      case 'ONBOARDING': return <OnboardingScreen navigate={navigate} goBack={goBack} />;
+      case 'LOGIN': return <LoginScreen navigate={navigate} goBack={goBack} setUser={handleSetUser} />;
+      case 'SIGNUP': return <SignupScreen navigate={navigate} goBack={goBack} setUser={handleSetUser} />;
+      case 'DASHBOARD': return <DashboardScreen user={user} navigate={navigate} goBack={goBack} currentScreen={screen} />;
+      case 'SCANNER': return <ScannerScreen navigate={navigate} goBack={goBack} user={user} route={{ params: routeParams }} />;
+      case 'DRUG_INTERACTION': return <DrugInteractionScreen navigate={navigate} goBack={goBack} />;
+      case 'DOSE_TRACKER': return <DoseTrackerScreen user={user} navigate={navigate} goBack={goBack} currentScreen={screen} />;
+      case 'ASK_AI': return <AskAIScreen navigate={navigate} goBack={goBack} />;
+      case 'HISTORY': return <MedicalHistoryScreen user={user} navigate={navigate} goBack={goBack} />;
+      case 'PHARMACY': return <PharmacyScreen navigate={navigate} goBack={goBack} />;
+      case 'PROFILE': return <ProfileScreen user={user} setUser={handleSetUser} navigate={navigate} goBack={goBack} />;
+      case 'CONFIRM_MEDICINES': return <ConfirmMedicinesScreen route={{ params: routeParams }} navigation={{ navigate, goBack }} />;
+      case 'PRESCRIPTION_DETAIL': return <PrescriptionDetailScreen route={{ params: routeParams }} navigation={{ navigate, goBack }} />;
+      case 'PRESCRIPTION_TIMELINE': return <PrescriptionTimelineScreen user={user} navigate={navigate} goBack={goBack} />;
+      case 'FAMILY_PROFILE': return <FamilyProfileScreen user={user} navigate={navigate} goBack={goBack} />;
+      case 'MEDICINE_EXPLAINER': return <MedicineExplainerScreen navigate={navigate} goBack={goBack} user={user} medicines={routeParams.medicines} />;
+      case 'REFILL_REMINDER': return <RefillReminderScreen user={user} navigate={navigate} goBack={goBack} />;
+      case 'SYMPTOM_LOOKUP': return <SymptomLookupScreen navigate={navigate} goBack={goBack} user={user} />;
+      default: return <LandingScreen navigate={navigate} goBack={goBack} />;
     }
   };
 
@@ -136,10 +188,10 @@ export default function App() {
       {showHeader && (
         <SafeAreaView style={styles.headerSafe}>
           <View style={styles.pageHeader}>
-            <TouchableOpacity onPress={() => navigate('DASHBOARD')} style={styles.backBtn}>
+            <TouchableOpacity onPress={goBack} style={styles.backBtn}>
               <Feather name="arrow-left" size={22} color={COLORS.textPrimary} />
             </TouchableOpacity>
-            <Text style={styles.pageTitle}>{title}</Text>
+            <Text style={styles.pageTitle}>{title || ''}</Text>
             <View style={{ width: 40 }} />
           </View>
         </SafeAreaView>

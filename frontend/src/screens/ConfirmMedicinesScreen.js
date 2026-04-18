@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import {
-    View, Text, ScrollView, Image, TouchableOpacity,
+    View, Text, ScrollView, Image, TouchableOpacity, TextInput,
     StyleSheet, Dimensions, Alert, ActivityIndicator
 } from 'react-native';
 import { API_URL } from '../config';
@@ -15,11 +15,24 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
             return acc;
         }, {})
     );
+    const [editableMeds, setEditableMeds] = useState(
+        rawResult.results.reduce((acc, r) => {
+            acc[r.name] = { dosage: r.dosage || '', frequency: r.frequency || '' };
+            return acc;
+        }, {})
+    );
     const [imgLayout, setImgLayout] = useState(null);
     const [naturalSize, setNaturalSize] = useState(null);
     const [loading, setLoading] = useState(false);
     const [selectedBox, setSelectedBox] = useState(null);
     const [imgError, setImgError] = useState(false);
+
+    const updateMed = (name, field, value) => {
+        setEditableMeds(prev => ({
+            ...prev,
+            [name]: { ...prev[name], [field]: value }
+        }));
+    };
 
     const onImageLoad = (e) => {
         setNaturalSize({ w: e.nativeEvent.source.width, h: e.nativeEvent.source.height });
@@ -65,8 +78,8 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
             .map(r => ({
                 name: r.name,
                 form: r.form,
-                dosage: r.dosage,
-                frequency: r.frequency,
+                dosage: editableMeds[r.name]?.dosage || r.dosage || '',
+                frequency: editableMeds[r.name]?.frequency || r.frequency || '',
                 duration: r.duration,
             }));
 
@@ -162,29 +175,55 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
                     const isOn = confirmed[m.medicine];
                     const pct = Math.round(m.confidence * 100);
                     return (
-                        <TouchableOpacity
+                        <View
                             key={i}
-                            onPress={() => toggle(m.medicine)}
                             style={[styles.card, isOn && styles.cardOn, selectedBox === m.medicine && styles.cardSelected]}
                         >
-                            <View style={styles.cardLeft}>
-                                <Text style={styles.medName}>{m.medicine}</Text>
-                                <View style={styles.row}>
-                                    <View style={[styles.badge,
-                                    { backgroundColor: m.uncertain ? '#FEF3C7' : pct > 80 ? '#D1FAE5' : '#FEE2E2' }]}>
-                                        <Text style={[styles.badgeText,
-                                        { color: m.uncertain ? '#92400E' : pct > 80 ? '#065F46' : '#991B1B' }]}>
-                                            {m.uncertain ? '⚠ uncertain' : `${pct}% confident`}
-                                        </Text>
+                            <View style={styles.cardHeader}>
+                                <View style={styles.cardLeft}>
+                                    <Text style={styles.medName}>{m.medicine}</Text>
+                                    <View style={styles.row}>
+                                        <View style={[styles.badge,
+                                        { backgroundColor: m.uncertain ? '#FEF3C7' : pct > 80 ? '#D1FAE5' : '#FEE2E2' }]}>
+                                            <Text style={[styles.badgeText,
+                                            { color: m.uncertain ? '#92400E' : pct > 80 ? '#065F46' : '#991B1B' }]}>
+                                                {m.uncertain ? '⚠ uncertain' : `${pct}% confident`}
+                                            </Text>
+                                        </View>
                                     </View>
                                 </View>
+                                <TouchableOpacity onPress={() => toggle(m.medicine)} style={[styles.toggle, isOn && styles.toggleOn]}>
+                                    <Text style={{ color: isOn ? '#fff' : '#6B7280', fontSize: 12 }}>
+                                        {isOn ? '✓ Include' : 'Skip'}
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
-                            <View style={[styles.toggle, isOn && styles.toggleOn]}>
-                                <Text style={{ color: isOn ? '#fff' : '#6B7280', fontSize: 12 }}>
-                                    {isOn ? '✓ Include' : 'Skip'}
-                                </Text>
-                            </View>
-                        </TouchableOpacity>
+
+                            {isOn && editableMeds[m.medicine] && (
+                                <View style={styles.editForm}>
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Dosage</Text>
+                                        <TextInput
+                                            style={styles.textInput}
+                                            value={editableMeds[m.medicine].dosage}
+                                            onChangeText={(t) => updateMed(m.medicine, 'dosage', t)}
+                                            placeholder="e.g. 500mg"
+                                            placeholderTextColor="#9CA3AF"
+                                        />
+                                    </View>
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Frequency</Text>
+                                        <TextInput
+                                            style={styles.textInput}
+                                            value={editableMeds[m.medicine].frequency}
+                                            onChangeText={(t) => updateMed(m.medicine, 'frequency', t)}
+                                            placeholder="e.g. Twice a day"
+                                            placeholderTextColor="#9CA3AF"
+                                        />
+                                    </View>
+                                </View>
+                            )}
+                        </View>
                     );
                 })}
             </ScrollView>
@@ -213,11 +252,12 @@ const styles = StyleSheet.create({
     bbox: { position: 'absolute', borderWidth: 2, borderRadius: 4 },
     list: { flex: 1, padding: 12 },
     card: {
-        flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
+        backgroundColor: '#fff',
         borderRadius: 12, padding: 14, marginBottom: 10,
         borderWidth: 1, borderColor: '#E5E7EB',
         shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1
     },
+    cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     cardOn: { borderColor: '#10B981', backgroundColor: '#F0FDF4' },
     cardSelected: { shadowOpacity: 0.12, elevation: 4 },
     cardLeft: { flex: 1 },
@@ -230,6 +270,13 @@ const styles = StyleSheet.create({
         backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB'
     },
     toggleOn: { backgroundColor: '#10B981', borderColor: '#10B981' },
+    editForm: { marginTop: 12, flexDirection: 'row', gap: 10, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#D1FAE5' },
+    inputGroup: { flex: 1 },
+    inputLabel: { fontSize: 11, color: '#065F46', fontWeight: '600', marginBottom: 4 },
+    textInput: {
+        backgroundColor: '#fff', borderWidth: 1, borderColor: '#A7F3D0', borderRadius: 8,
+        paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, color: '#111827'
+    },
     footer: { padding: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
     confirmBtn: { backgroundColor: '#3B82F6', borderRadius: 12, padding: 16, alignItems: 'center' },
     confirmText: { color: '#fff', fontSize: 16, fontWeight: '600' },
