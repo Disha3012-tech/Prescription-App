@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 export const API_URL =
     Platform.OS === "web"
         ? "http://localhost:8000/"
-        : "http://10.78.242.121:8000/";
+        : "https://anew-rockslide-hyphen.ngrok-free.dev/";
 
 export const COUNTRIES = [
     { label: '🇮🇳 India', value: 'India', currency: 'INR' },
