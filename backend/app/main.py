@@ -602,7 +602,7 @@ out center tags;
 
 # ── Nominatim: primary fallback ───────────────────────────────────────────────
 async def fetch_nominatim(lat: float, lng: float):
-    delta = 0.018  # ~2 km
+    delta = 0.018
     url = (
         f"https://nominatim.openstreetmap.org/search"
         f"?amenity=pharmacy"
@@ -614,10 +614,8 @@ async def fetch_nominatim(lat: float, lng: float):
             resp = await client.get(url, headers={"User-Agent": "PrescriptionApp/1.0"})
             if resp.status_code == 200:
                 items = resp.json()
-                items = [
-                    i for i in items
-                    if i.get("category") == "amenity" and i.get("type") == "pharmacy"
-                ]
+                # ← Remove strict category==amenity && type==pharmacy filter
+                # Nominatim with amenity=pharmacy query is already filtered
                 items.sort(key=lambda x: haversine_km(lat, lng, float(x["lat"]), float(x["lon"])))
                 print(f"[NOMINATIM] ✓ {len(items)} pharmacies")
                 return items
@@ -629,31 +627,33 @@ async def fetch_nominatim(lat: float, lng: float):
 
 # ── Photon: secondary fallback (runs on OSM data, very reliable) ──────────────
 async def fetch_photon(lat: float, lng: float):
-    """
-    Photon by Komoot — OSM-based geocoder, very reliable, no rate limits for small usage.
-    https://photon.komoot.io
-    """
+    # bbox_size controls search radius — increase from default
     url = (
         f"https://photon.komoot.io/api/"
-        f"?q=pharmacy&lat={lat}&lon={lng}&limit=20&lang=en"
+        f"?q=pharmacy&lat={lat}&lon={lng}&limit=30&lang=en"
+        f"&bbox={lng-0.05},{lat-0.05},{lng+0.05},{lat+0.05}"
     )
     try:
         async with httpx.AsyncClient(timeout=12) as client:
             resp = await client.get(url, headers={"User-Agent": "PrescriptionApp/1.0"})
             if resp.status_code == 200:
                 features = resp.json().get("features", [])
+                print(f"[PHOTON RAW] {len(features)} total features")
+                for f in features[:3]:
+                    print(f"  → {f.get('properties', {}).get('name')} | osm_key={f.get('properties', {}).get('osm_key')} osm_value={f.get('properties', {}).get('osm_value')}")
+                
                 # Filter: only amenity=pharmacy
                 features = [
                     f for f in features
-                    if f.get("properties", {}).get("osm_value") == "pharmacy"
+                    if f.get("properties", {}).get("osm_key") == "amenity"
+                    and f.get("properties", {}).get("osm_value") == "pharmacy"
                 ]
-                # Sort by distance
                 features.sort(key=lambda f: haversine_km(
                     lat, lng,
                     f["geometry"]["coordinates"][1],
                     f["geometry"]["coordinates"][0],
                 ))
-                print(f"[PHOTON] ✓ {len(features)} pharmacies")
+                print(f"[PHOTON] ✓ {len(features)} pharmacies after filter")
                 return features
             print(f"[PHOTON] HTTP {resp.status_code}")
     except Exception as e:
@@ -666,16 +666,26 @@ def parse_photon_results(features: list, user_lat: float, user_lng: float) -> li
     seen = set()
     for f in features:
         props = f.get("properties", {})
-        name = props.get("name")
-        if not name or name.lower() in seen:
-            continue
-        seen.add(name.lower())
-
+        name = props.get("name") or "Pharmacy"  # ← don't skip unnamed ones
+        
+        # Deduplicate by name+coords combo to handle same pharmacy twice
         coords = f.get("geometry", {}).get("coordinates", [])
         if len(coords) < 2:
             continue
         plng, plat = float(coords[0]), float(coords[1])
+        
+        dedup_key = f"{name.lower()}_{round(plat,4)}_{round(plng,4)}"
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+
         if not (-90 <= plat <= 90 and -180 <= plng <= 180):
+            continue
+
+        # Distance check — skip anything > 10km (clearly wrong data)
+        dist = haversine_km(user_lat, user_lng, plat, plng)
+        if dist > 10:
+            print(f"[PHOTON SKIP] {name} is {dist:.1f}km away — too far")
             continue
 
         addr_parts = list(filter(None, [
@@ -683,15 +693,14 @@ def parse_photon_results(features: list, user_lat: float, user_lng: float) -> li
             props.get("street"),
             props.get("suburb") or props.get("district") or props.get("city"),
         ]))
-        dist = haversine_km(user_lat, user_lng, plat, plng)
 
         results.append({
-            "id": str(props.get("osm_id", "")),
+            "id": str(props.get("osm_id", f"{plat}_{plng}")),
             "title": name,
             "latitude": plat,
             "longitude": plng,
             "rating": None,
-            "address": ", ".join(addr_parts),
+            "address": ", ".join(addr_parts) if addr_parts else props.get("city", ""),
             "open_now": None,
             "place_id": None,
             "distanceKm": round(dist, 3),
@@ -699,44 +708,49 @@ def parse_photon_results(features: list, user_lat: float, user_lng: float) -> li
 
     results.sort(key=lambda x: x["distanceKm"])
     return results
-
+    
 
 # ── Main endpoint ─────────────────────────────────────────────────────────────
 @app.get("/api/pharmacies/nearby")
 async def get_nearby_pharmacies(lat: float, lng: float, limit: int = 20):
-    # 1. Check cache first
     cached = _cache_get(lat, lng)
     if cached:
         return {"status": "success", "pharmacies": cached[:limit], "source": "cache"}
 
-    # 2. Try Overpass (all mirrors in parallel)
-    overpass_data = await fetch_overpass(lat, lng, radius=3000)
-    if overpass_data and overpass_data.get("elements"):
-        results = parse_overpass_results(overpass_data["elements"], lat, lng)
+    overpass_task = asyncio.create_task(fetch_overpass(lat, lng, radius=3000))
+    photon_task = asyncio.create_task(fetch_photon(lat, lng))
+    overpass_data, photon_features = await asyncio.gather(
+        overpass_task, photon_task, return_exceptions=True
+    )
+
+    def filter_nearby(results, max_km=5.0):
+        """Hard cap — never return anything more than max_km away."""
+        filtered = [r for r in results if r.get("distanceKm", 999) <= max_km]
+        print(f"[FILTER] {len(results)} → {len(filtered)} within {max_km}km")
+        return filtered
+
+    if isinstance(overpass_data, dict) and overpass_data.get("elements"):
+        results = filter_nearby(parse_overpass_results(overpass_data["elements"], lat, lng))
         if results:
             _cache_set(lat, lng, results)
             return {"status": "success", "pharmacies": results[:limit], "source": "overpass"}
 
-    # 3. Nominatim fallback
-    print("[FALLBACK] Trying Nominatim...")
-    nominatim_items = await fetch_nominatim(lat, lng)
-    if nominatim_items:
-        results = parse_nominatim_results(nominatim_items, lat, lng)
-        if results:
-            _cache_set(lat, lng, results)
-            return {"status": "success", "pharmacies": results[:limit], "source": "nominatim"}
-
-    # 4. Photon fallback (most reliable, OSM-backed)
-    print("[FALLBACK] Trying Photon...")
-    photon_features = await fetch_photon(lat, lng)
-    if photon_features:
-        results = parse_photon_results(photon_features, lat, lng)
+    if isinstance(photon_features, list) and photon_features:
+        results = filter_nearby(parse_photon_results(photon_features, lat, lng))
         if results:
             _cache_set(lat, lng, results)
             return {"status": "success", "pharmacies": results[:limit], "source": "photon"}
 
-    return {"status": "error", "pharmacies": [], "message": "All pharmacy data sources failed."}
+    print("[FALLBACK] Trying Nominatim...")
+    nominatim_items = await fetch_nominatim(lat, lng)
+    if nominatim_items:
+        results = filter_nearby(parse_nominatim_results(nominatim_items, lat, lng))
+        if results:
+            _cache_set(lat, lng, results)
+            return {"status": "success", "pharmacies": results[:limit], "source": "nominatim"}
 
+    return {"status": "error", "pharmacies": [], "message": "All pharmacy data sources failed."}
+    
 class ConfirmRequest(BaseModel):
     confirmed_medicines: List[dict]   # [{name, dosage, frequency, duration, form}]
     country: Optional[str] = "India"

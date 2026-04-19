@@ -185,35 +185,6 @@ export default function SignupScreen({ navigate, goBack, setUser }) {
     return 2;
   };
 
-  const [errorMsg, setErrorMsg] = useState(null);
-  const [pendingUserId, setPendingUserId] = useState(null);
-  const [otp, setOtp] = useState('');
-
-  const mouseX = useRef(new Animated.Value(0)).current;
-  const mouseY = useRef(new Animated.Value(0)).current;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: (evt, gestureState) => {
-        mouseX.setValue(gestureState.moveX - width / 2);
-        mouseY.setValue(gestureState.moveY - height / 2);
-      },
-      onPanResponderRelease: () => {
-        Animated.spring(mouseX, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
-        Animated.spring(mouseY, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
-      },
-    })
-  ).current;
-
-  const getStrength = () => {
-    if (password.length === 0) return 0;
-    if (password.length < 8) return 1;
-    if (/[A-Z]/.test(password) && /\d/.test(password)) return 3;
-    return 2;
-  };
-
   const handleSignup = async () => {
     if (!name) { setErrorMsg("Full Name is required"); return; }
     if (!email) { setErrorMsg("Email is required"); return; }

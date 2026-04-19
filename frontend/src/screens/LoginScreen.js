@@ -93,7 +93,7 @@ export default function LoginScreen({ navigate, goBack, setUser }) {
   const [focusedField, setFocusedField] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [loading, setLoading] = useState(false);
-  
+
   // Google Auth Request
   const [request, response, promptAsync] = Google.useAuthRequest({
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
@@ -120,13 +120,13 @@ export default function LoginScreen({ navigate, goBack, setUser }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: token === "demo-token" ? "user@google.com" : "verified_google_" + Date.now() + "@gmail.com", 
+          email: token === "demo-token" ? "user@google.com" : "verified_google_" + Date.now() + "@gmail.com",
           full_name: "Google User",
           provider: "google"
         })
       });
       const data = await resp.json();
-      
+
       if (resp.ok) {
         if (setUser) {
           setUser({ ...data.user, name: data.user.full_name, token: data.access_token });
@@ -152,24 +152,6 @@ export default function LoginScreen({ navigate, goBack, setUser }) {
       handleGoogleLoginSuccess("mock-token-" + Date.now());
     }
   };
-
-  const mouseX = useRef(new Animated.Value(0)).current;
-  const mouseY = useRef(new Animated.Value(0)).current;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: (evt, gestureState) => {
-        mouseX.setValue(gestureState.moveX - width / 2);
-        mouseY.setValue(gestureState.moveY - height / 2);
-      },
-      onPanResponderRelease: () => {
-        Animated.spring(mouseX, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
-        Animated.spring(mouseY, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
-      },
-    })
-  ).current;
 
   const mouseX = useRef(new Animated.Value(0)).current;
   const mouseY = useRef(new Animated.Value(0)).current;
@@ -286,7 +268,7 @@ export default function LoginScreen({ navigate, goBack, setUser }) {
               <View style={styles.line} /><Text style={styles.dividerText}>OR SIGN IN WITH</Text><View style={styles.line} />
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.socialButton}
               onPress={onGoogleTap}
               disabled={loading}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ActivityIndicator,
-  TouchableOpacity, Alert, Linking, ScrollView, Platform,
+  TouchableOpacity, Linking, ScrollView, Platform,
   useWindowDimensions, Animated, PanResponder, StatusBar,
 } from 'react-native';
 import { MapView, Marker, PROVIDER_GOOGLE } from '../components/Map';
@@ -12,7 +12,7 @@ import { API_URL } from '../config';
 
 const IS_WEB = Platform.OS === 'web';
 
-// ── Haversine ────────────────────────────────────────────────────────────────
+// ── Haversine ─────────────────────────────────────────────────────────────────
 const getDistanceKm = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -28,26 +28,6 @@ const getDistanceKm = (lat1, lon1, lat2, lon2) => {
 const formatDistance = (km) =>
   km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 
-// ── Star Rating ───────────────────────────────────────────────────────────────
-const StarRating = ({ rating }) => {
-  if (!rating) return null;
-  const full = Math.round(rating);
-  return (
-    <View style={styles.starsRow}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <MaterialCommunityIcons
-          key={i}
-          name={i <= full ? 'star' : 'star-outline'}
-          size={11}
-          color={i <= full ? '#F59E0B' : '#D1D5DB'}
-          style={{ marginRight: 1 }}
-        />
-      ))}
-      <Text style={styles.ratingText}>{rating.toFixed(1)}</Text>
-    </View>
-  );
-};
-
 // ── Hamburger Icon ────────────────────────────────────────────────────────────
 const HamburgerIcon = () => (
   <View style={styles.hamburger}>
@@ -60,6 +40,9 @@ const HamburgerIcon = () => (
 // ── Pharmacy Card ─────────────────────────────────────────────────────────────
 const PharmacyCard = React.memo(({ pharmacy, index, onNavigate, compact }) => {
   const isOpen = pharmacy.open_now;
+  const statusColor = isOpen === true ? '#10B981' : isOpen === false ? '#EF4444' : '#94A3B8';
+  const statusLabel = isOpen === true ? 'Open' : isOpen === false ? 'Closed' : 'Hours?';
+
   return (
     <View style={[styles.pharmacyCard, compact && styles.pharmacyCardCompact]}>
       <View style={styles.rankBadge}>
@@ -71,38 +54,42 @@ const PharmacyCard = React.memo(({ pharmacy, index, onNavigate, compact }) => {
       </View>
 
       <View style={styles.pharmacyInfo}>
-        <Text style={[styles.pharmacyName, compact && styles.pharmacyNameCompact]} numberOfLines={1}>
-          {pharmacy.title}
-        </Text>
+        {/* Name + open badge on same row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text
+            style={[styles.pharmacyName, compact && styles.pharmacyNameCompact, { flex: 1 }]}
+            numberOfLines={1}
+          >
+            {pharmacy.title}
+          </Text>
+          <View style={[styles.openBadge, {
+            backgroundColor: `${statusColor}18`,
+            borderColor: `${statusColor}40`,
+          }]}>
+            <View style={[styles.openDot, { backgroundColor: statusColor }]} />
+            <Text style={[styles.openBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+          </View>
+        </View>
+
+        {/* Distance */}
         <View style={styles.metaRow}>
           <View style={styles.distancePill}>
             <Feather name="navigation" size={10} color={COLORS.primary} />
             <Text style={styles.distancePillText}>{formatDistance(pharmacy.distanceKm)}</Text>
           </View>
-          {pharmacy.rating ? <StarRating rating={pharmacy.rating} /> : null}
         </View>
-        <View style={styles.statusRow}>
-          <View style={[styles.statusDot,
-          isOpen === true ? styles.statusDotOpen :
-            isOpen === false ? styles.statusDotClosed :
-              styles.statusDotUnknown
-          ]} />
-          <Text style={[styles.statusText,
-          isOpen === true ? styles.statusOpen :
-            isOpen === false ? styles.statusClosed :
-              styles.statusUnknown
-          ]}>
-            {isOpen === true ? 'Open now' : isOpen === false ? 'Closed' : 'Hours unknown'}
-          </Text>
-        </View>
-        {pharmacy.address ? (
-          <Text style={styles.addressText} numberOfLines={1}>
-            {pharmacy.address}
-          </Text>
+
+        {/* Address */}
+        {pharmacy.address && pharmacy.address !== 'Address not specified' ? (
+          <Text style={styles.addressText} numberOfLines={1}>{pharmacy.address}</Text>
         ) : null}
       </View>
 
-      <TouchableOpacity style={styles.dirBtn} onPress={() => onNavigate(pharmacy)} activeOpacity={0.8}>
+      <TouchableOpacity
+        style={styles.dirBtn}
+        onPress={() => onNavigate(pharmacy)}
+        activeOpacity={0.8}
+      >
         <Feather name="navigation-2" size={15} color="#FFF" />
       </TouchableOpacity>
     </View>
@@ -110,14 +97,21 @@ const PharmacyCard = React.memo(({ pharmacy, index, onNavigate, compact }) => {
 });
 
 // ── Sort Bar ──────────────────────────────────────────────────────────────────
+const SORT_OPTIONS = [
+  { key: 'distance', label: 'Nearest', icon: 'navigation' },
+  { key: 'open', label: 'Open Now', icon: 'clock' },
+];
+
 const SortBar = ({ count, sortBy, setSortBy }) => (
   <View style={styles.sortBar}>
     <View>
       <Text style={styles.sheetTitle}>{count} Pharmacies</Text>
-      <Text style={styles.sheetSub}>Sorted by {sortBy}</Text>
+      <Text style={styles.sheetSub}>
+        {sortBy === 'open' ? 'Open pharmacies first' : 'Sorted by distance'}
+      </Text>
     </View>
     <View style={styles.sortRow}>
-      {['distance', 'rating'].map(key => (
+      {SORT_OPTIONS.map(({ key, label, icon }) => (
         <TouchableOpacity
           key={key}
           style={[styles.sortPill, sortBy === key && styles.sortPillActive]}
@@ -125,12 +119,12 @@ const SortBar = ({ count, sortBy, setSortBy }) => (
           activeOpacity={0.7}
         >
           <Feather
-            name={key === 'distance' ? 'navigation' : 'star'}
+            name={icon}
             size={11}
             color={sortBy === key ? '#FFF' : COLORS.textSecondary}
           />
           <Text style={[styles.sortPillText, sortBy === key && styles.sortPillTextActive]}>
-            {key === 'distance' ? 'Nearest' : 'Top Rated'}
+            {label}
           </Text>
         </TouchableOpacity>
       ))}
@@ -146,19 +140,18 @@ export default function PharmacyScreen() {
   const [loading, setLoading] = useState(true);
   const [pharmacies, setPharmacies] = useState([]);
   const [mapReady, setMapReady] = useState(false);
+  const [sortBy, setSortBy] = useState('distance');
 
-  // ── Web panel toggle ──────────────────────────────────────────
-  // Desktop (≥768): panel open by default; mobile web: closed by default
+  // ── Web panel ────────────────────────────────────────────────
   const isMobileWeb = IS_WEB && width < 768;
   const [panelOpen, setPanelOpen] = useState(true);
 
-  // When crossing the breakpoint, reset to sensible default
   useEffect(() => {
     if (!IS_WEB) return;
     setPanelOpen(width >= 768);
-  }, [width >= 768]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [width >= 768]); // eslint-disable-line
 
-  // ── Mobile bottom-sheet snap points ──────────────────────────
+  // ── Snap points ───────────────────────────────────────────────
   const SNAP_TOP = height * 0.08;
   const SNAP_MID = height * 0.48;
   const SNAP_BOTTOM = height * 0.82;
@@ -183,10 +176,9 @@ export default function PharmacyScreen() {
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
         scrollEnabledRef.current ? g.dy > 6 : Math.abs(g.dy) > 5,
-      onPanResponderGrant: () => { sheetY.stopAnimation(); },
-      onPanResponderMove: (_, g) => {
-        sheetY.setValue(Math.max(SNAP_TOP, Math.min(SNAP_BOTTOM, lastY.current + g.dy)));
-      },
+      onPanResponderGrant: () => sheetY.stopAnimation(),
+      onPanResponderMove: (_, g) =>
+        sheetY.setValue(Math.max(SNAP_TOP, Math.min(SNAP_BOTTOM, lastY.current + g.dy))),
       onPanResponderRelease: (_, g) => {
         const cur = lastY.current + g.dy;
         const vel = g.vy;
@@ -242,6 +234,7 @@ export default function PharmacyScreen() {
   // ── Data fetching ─────────────────────────────────────────────
   useEffect(() => { fetchLocationAndPharmacies(); }, []);
   useEffect(() => {
+    if (IS_WEB) { setMapReady(true); return; }
     const t = setTimeout(() => setMapReady(true), 2000);
     return () => clearTimeout(t);
   }, []);
@@ -264,11 +257,13 @@ export default function PharmacyScreen() {
         if (!loc) throw new Error('Unable to determine your location. Please try again.');
       }
       setLocation(loc.coords);
+
       const res = await fetch(
         `${API_URL}api/pharmacies/nearby?lat=${loc.coords.latitude}&lng=${loc.coords.longitude}&limit=20`
       );
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
+
       setPharmacies(
         (data.pharmacies ?? []).map(p => ({
           ...p,
@@ -285,12 +280,24 @@ export default function PharmacyScreen() {
     }
   };
 
+  // ── Sorted list ───────────────────────────────────────────────
+  const sortedPharmacies = useMemo(() => {
+    const arr = [...pharmacies];
+    if (sortBy === 'open') {
+      return arr.sort((a, b) => {
+        const rank = v => v === true ? 0 : v === null ? 1 : 2;
+        const diff = rank(a.open_now) - rank(b.open_now);
+        return diff !== 0 ? diff : a.distanceKm - b.distanceKm;
+      });
+    }
+    return arr.sort((a, b) => a.distanceKm - b.distanceKm);
+  }, [pharmacies, sortBy]);
 
+  // ── Directions ────────────────────────────────────────────────
   const openDirections = useCallback((pharmacy) => {
     const { latitude, longitude, title } = pharmacy;
     const label = encodeURIComponent(title || 'Pharmacy');
     const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`;
-
     if (Platform.OS === 'ios') {
       Linking.openURL(`maps://?daddr=${latitude},${longitude}&q=${label}`)
         .catch(() => Linking.openURL(googleUrl));
@@ -302,6 +309,7 @@ export default function PharmacyScreen() {
     }
   }, []);
 
+  // ── Map markers (use raw pharmacies — markers don't need sort order) ──
   const mapMarkers = pharmacies.map(pharmacy => (
     <Marker
       key={pharmacy.id}
@@ -319,7 +327,7 @@ export default function PharmacyScreen() {
     </Marker>
   ));
 
-  // ── Loading / Error states ────────────────────────────────────
+  // ── Shared states ─────────────────────────────────────────────
   const renderCenter = (content) => (
     <View style={styles.center}>{content}</View>
   );
@@ -349,7 +357,6 @@ export default function PharmacyScreen() {
       </View>
     );
 
-  // ── Shared MapView ────────────────────────────────────────────
   const renderMapView = (mapStyle) => (
     <MapView
       style={mapStyle}
@@ -367,12 +374,28 @@ export default function PharmacyScreen() {
     </MapView>
   );
 
+  const renderList = (compact = false) =>
+    sortedPharmacies.length === 0 ? (
+      <View style={styles.emptyState}>
+        <MaterialCommunityIcons name="map-marker-off" size={40} color={COLORS.textSecondary} />
+        <Text style={styles.emptyText}>No pharmacies found nearby</Text>
+      </View>
+    ) : sortedPharmacies.map((p, i) => (
+      <PharmacyCard
+        key={p.id}
+        pharmacy={p}
+        index={i}
+        onNavigate={openDirections}
+        compact={compact}
+      />
+    ));
+
   // ── Render ────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.headerIconWrap}>
@@ -392,49 +415,27 @@ export default function PharmacyScreen() {
         : errorMsg ? errorState(errorMsg)
           : !location ? errorState("We couldn't determine your location.", 'map-pin', COLORS.textSecondary, '#F8FAFC')
 
-            /* ════════════════════════════════════════════════════════
-               WEB  →  map always fills the background.
-                        ☰ button floats top-left over the map.
-                        Clicking it slides the list panel in/out.
-                        Desktop: panel is a fixed sidebar (360px).
-                        Mobile web: panel is a full-height overlay drawer.
-               ════════════════════════════════════════════════════════ */
             : IS_WEB ? (
+              /* ── WEB layout ── */
               <View style={styles.webBody}>
 
-                {/* ── LIST PANEL (conditional) ── */}
                 {panelOpen && (
-                  <View style={[
-                    styles.webPanel,
-                    isMobileWeb && styles.webPanelMobile,
-                  ]}>
+                  <View style={[styles.webPanel, isMobileWeb && styles.webPanelMobile]}>
+                    <View style={styles.webPanelHeader}>
+                      <SortBar count={sortedPharmacies.length} sortBy={sortBy} setSortBy={setSortBy} />
+                    </View>
                     <View style={styles.sheetDivider} />
                     <ScrollView
                       showsVerticalScrollIndicator={false}
                       contentContainerStyle={styles.webListContent}
                     >
-                      {pharmacies.length === 0 ? (
-                        <View style={styles.emptyState}>
-                          <MaterialCommunityIcons name="map-marker-off" size={40} color={COLORS.textSecondary} />
-                          <Text style={styles.emptyText}>No pharmacies found nearby</Text>
-                        </View>
-                      ) : pharmacies.map((p, i) => (
-                        <PharmacyCard
-                          key={p.id}
-                          pharmacy={p}
-                          index={i}
-                          onNavigate={openDirections}
-                          compact
-                        />
-                      ))}
+                      {renderList(true)}
                     </ScrollView>
                   </View>
                 )}
 
-                {/* ── MAP PANEL — always rendered, fills all remaining space ── */}
                 <View style={styles.webMapPanel}>
                   {renderMapView({ flex: 1 })}
-
                   {!mapReady && (
                     <View style={[StyleSheet.absoluteFillObject, styles.mapLoading]}>
                       <ActivityIndicator size="small" color={COLORS.primary} />
@@ -443,7 +444,6 @@ export default function PharmacyScreen() {
                   )}
                 </View>
 
-                {/* Dim overlay — tapping it closes the drawer on mobile web */}
                 {isMobileWeb && panelOpen && (
                   <TouchableOpacity
                     style={styles.drawerOverlay}
@@ -451,7 +451,7 @@ export default function PharmacyScreen() {
                     activeOpacity={1}
                   />
                 )}
-                {/* ☰ Floating toggle — always visible, top-left over map */}
+
                 <TouchableOpacity
                   style={styles.floatingToggleBtn}
                   onPress={() => setPanelOpen(v => !v)}
@@ -461,10 +461,8 @@ export default function PharmacyScreen() {
                 </TouchableOpacity>
               </View>
 
-              /* ════════════════════════════════════════════════════════
-                 NATIVE MOBILE  →  full-screen map + draggable sheet
-                 ════════════════════════════════════════════════════════ */
             ) : (
+              /* ── NATIVE MOBILE layout ── */
               <View style={styles.mapContainer}>
                 {renderMapView(StyleSheet.absoluteFillObject)}
 
@@ -480,9 +478,7 @@ export default function PharmacyScreen() {
                     <View style={styles.dragPillWrap}>
                       <View style={styles.dragPill} />
                     </View>
-                    <View style={{ paddingVertical: 10 }}>
-                      <Text style={styles.sheetTitle}>{pharmacies.length} Pharmacies Nearby</Text>
-                    </View>
+                    <SortBar count={sortedPharmacies.length} sortBy={sortBy} setSortBy={setSortBy} />
                     <View style={styles.hintRow}>
                       <Feather name="chevrons-up" size={13} color={COLORS.textSecondary} />
                       <Text style={styles.hintText}>Drag to reveal list or map</Text>
@@ -498,14 +494,7 @@ export default function PharmacyScreen() {
                     scrollEnabled={scrollEnabled}
                     contentContainerStyle={styles.listContent}
                   >
-                    {pharmacies.length === 0 ? (
-                      <View style={styles.emptyState}>
-                        <MaterialCommunityIcons name="map-marker-off" size={40} color={COLORS.textSecondary} />
-                        <Text style={styles.emptyText}>No pharmacies found nearby</Text>
-                      </View>
-                    ) : pharmacies.map((p, i) => (
-                      <PharmacyCard key={p.id} pharmacy={p} index={i} onNavigate={openDirections} />
-                    ))}
+                    {renderList(false)}
                   </ScrollView>
                 </Animated.View>
               </View>
@@ -519,7 +508,7 @@ export default function PharmacyScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
 
-  // ── Header ──
+  // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16,
@@ -542,30 +531,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
 
-  // ── Hamburger lines ──
+  // Hamburger
   hamburger: { gap: 4, justifyContent: 'center', alignItems: 'center' },
   hLine: { width: 16, height: 2, backgroundColor: '#FFF', borderRadius: 2 },
 
-  // ── Floating ☰ button (always over the map on web) ──
+  // Floating toggle
   floatingToggleBtn: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    zIndex: 5,
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    position: 'absolute', top: 14, left: 14, zIndex: 5,
+    width: 44, height: 44, borderRadius: 12,
     backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 10,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22, shadowRadius: 10, elevation: 10,
   },
 
-  // ── Center states ──
+  // Center states
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   loadingCard: {
     alignItems: 'center', backgroundColor: '#FFF', borderRadius: 24, padding: 36,
@@ -593,23 +573,16 @@ const styles = StyleSheet.create({
   },
   retryText: { color: '#FFF', fontWeight: '600', fontSize: 15 },
 
-  // ── Web layout ──
+  // Web layout
   webBody: { flex: 1, flexDirection: 'row' },
-
-  // Desktop sidebar
   webPanel: {
-    width: 360,
-    backgroundColor: '#FFFFFF',
+    width: 360, backgroundColor: '#FFFFFF',
     borderRightWidth: 1, borderRightColor: '#F1F5F9',
     shadowColor: '#000', shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.06, shadowRadius: 12, elevation: 6,
-    zIndex: 10,
+    shadowOpacity: 0.06, shadowRadius: 12, elevation: 6, zIndex: 10,
   },
-  // Mobile web: full-height overlay drawer that slides over the map
   webPanelMobile: {
-    position: 'absolute',
-    top: 0, left: 0, bottom: 0,
-    width: '85%',
+    position: 'absolute', top: 0, left: 0, bottom: 0, width: '85%',
     zIndex: 300,
     borderRightWidth: 1, borderRightColor: '#E2E8F0',
     shadowColor: '#000', shadowOffset: { width: 6, height: 0 },
@@ -618,15 +591,12 @@ const styles = StyleSheet.create({
   webPanelHeader: { paddingHorizontal: 16, paddingVertical: 14 },
   webMapPanel: { flex: 1, position: 'relative', overflow: 'hidden' },
   webListContent: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 24 },
-
-  // Dim backdrop when drawer is open on mobile web
   drawerOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    zIndex: 200,
+    backgroundColor: 'rgba(0,0,0,0.35)', zIndex: 200,
   },
 
-  // ── Map (native mobile) ──
+  // Map
   mapContainer: { flex: 1, position: 'relative' },
   mapLoading: {
     ...StyleSheet.absoluteFillObject,
@@ -635,7 +605,7 @@ const styles = StyleSheet.create({
   },
   mapLoadingText: { fontSize: 14, color: COLORS.primary, fontWeight: '500' },
 
-  // ── Custom marker ──
+  // Markers
   markerOuter: { alignItems: 'center' },
   markerInner: {
     backgroundColor: COLORS.primary, width: 34, height: 34, borderRadius: 17,
@@ -651,7 +621,7 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.primary, marginTop: -1,
   },
 
-  // ── Bottom sheet (native mobile) ──
+  // Bottom sheet
   bottomSheet: {
     position: 'absolute', left: 0, right: 0, top: 0,
     backgroundColor: '#FFFFFF',
@@ -672,7 +642,7 @@ const styles = StyleSheet.create({
   },
   hintText: { fontSize: 11, color: '#94A3B8', letterSpacing: 0.2 },
 
-  // ── Sort bar ──
+  // Sort bar
   sortBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sheetTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A', letterSpacing: -0.4 },
   sheetSub: { fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
@@ -692,12 +662,12 @@ const styles = StyleSheet.create({
   sortPillTextActive: { color: '#FFF' },
   sheetDivider: { height: 1, backgroundColor: '#F1F5F9' },
 
-  // ── List ──
+  // List
   listContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 60 },
   emptyState: { alignItems: 'center', paddingVertical: 48, gap: 12 },
   emptyText: { fontSize: 15, color: COLORS.textSecondary },
 
-  // ── Pharmacy card ──
+  // Pharmacy card
   pharmacyCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#FFFFFF', borderRadius: 18, padding: 14, marginBottom: 10,
@@ -720,6 +690,16 @@ const styles = StyleSheet.create({
   pharmacyInfo: { flex: 1 },
   pharmacyName: { fontSize: 14, fontWeight: '700', color: '#0F172A', letterSpacing: -0.2 },
   pharmacyNameCompact: { fontSize: 13 },
+
+  // Open badge
+  openBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 7, paddingVertical: 2,
+    borderRadius: 20, borderWidth: 1,
+  },
+  openDot: { width: 5, height: 5, borderRadius: 3 },
+  openBadgeText: { fontSize: 10, fontWeight: '700' },
+
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
   distancePill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -727,15 +707,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20,
   },
   distancePillText: { fontSize: 11, color: COLORS.primary, fontWeight: '700' },
-  starsRow: { flexDirection: 'row', alignItems: 'center', gap: 1 },
-  ratingText: { fontSize: 11, color: '#64748B', marginLeft: 3, fontWeight: '600' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusDotOpen: { backgroundColor: '#10B981' },
-  statusDotClosed: { backgroundColor: '#EF4444' },
-  statusText: { fontSize: 11, fontWeight: '500' },
-  statusOpen: { color: '#10B981' },
-  statusClosed: { color: '#EF4444' },
+
   dirBtn: {
     width: 38, height: 38, borderRadius: 12,
     backgroundColor: COLORS.primary,
@@ -743,7 +715,5 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 4, marginLeft: 10,
   },
-  statusDotUnknown: { backgroundColor: '#94A3B8' },
-  statusUnknown: { color: '#94A3B8' },
   addressText: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
 });
