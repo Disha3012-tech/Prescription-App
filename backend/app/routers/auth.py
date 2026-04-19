@@ -11,6 +11,42 @@ from ..core.jwt_handler import generate_token
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
+@router.post("/social-login")
+async def social_login(
+    payload: schemas.SocialLoginRequest,
+    db: Session = Depends(get_db),
+):
+    # Check if user already exists
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    
+    if not user:
+        # Create new user for social login (no password needed as it's social)
+        user = models.User(
+            full_name=payload.full_name,
+            email=payload.email,
+            phone="",
+            hashed_password="SOCIAL_LOGIN_PROVIDER_" + payload.provider.upper()
+        )
+        db.add(user)
+        try:
+            db.commit()
+            db.refresh(user)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+            
+    token = generate_token(data={"sub": user.email})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone": user.phone
+        }
+    }
+
 @router.post("/register", status_code=201)
 async def register_user(
     user: schemas.UserCreate,

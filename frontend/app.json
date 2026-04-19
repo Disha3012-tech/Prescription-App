@@ -2,6 +2,7 @@
   "expo": {
     "name": "presription-scanner",
     "slug": "presription-scanner",
+    "scheme": "prescribepal",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -36,6 +37,9 @@
       "eas": {
         "projectId": "4de0a52c-9585-4692-8ed4-d70f177b8989"
       }
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

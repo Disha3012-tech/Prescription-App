@@ -9,6 +9,18 @@ from rapidfuzz import fuzz
 import pytesseract
 import shutil
 
+import shutil
+
+tess_path = shutil.which("tesseract")
+
+if tess_path:
+    pytesseract.pytesseract.tesseract_cmd = tess_path
+else:
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+import pytesseract
+import shutil
+
 pytesseract.pytesseract.tesseract_cmd = shutil.which("tesseract")
 reader = easyocr.Reader(['en'], gpu=False)
 TESS_CONFIG = r'--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./-()' 

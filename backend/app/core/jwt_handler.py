@@ -7,7 +7,7 @@ from ..database import get_db
 from sqlalchemy.orm import Session
 import os
 
-SECRET_KEY = os.getenv("SECRET_KEY", "81ab2acdce9dc6d8e8c5926b887d89a479b1c2197c9cd8848d533ca487864733")
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
 

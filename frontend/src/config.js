@@ -1,4 +1,9 @@
-export const API_URL = 'http://127.0.0.1:8000/'; // e.g. http://192.168.1.5:8000
+import { Platform } from 'react-native';
+
+export const API_URL =
+    Platform.OS === "web"
+        ? "http://localhost:8000/"
+        : "http://10.78.242.121:8000/";
 
 export const COUNTRIES = [
     { label: '🇮🇳 India', value: 'India', currency: 'INR' },

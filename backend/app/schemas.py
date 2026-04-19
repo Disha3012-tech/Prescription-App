@@ -26,6 +26,11 @@ class OTPVerify(BaseModel):
 class OTPResend(BaseModel):
     user_id: str
 
+class SocialLoginRequest(BaseModel):
+    email: EmailStr
+    full_name: str
+    provider: str
+
 class UserResponse(UserBase):
     id: str
     class Config:
