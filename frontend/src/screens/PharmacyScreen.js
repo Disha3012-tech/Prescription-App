@@ -59,7 +59,7 @@ const HamburgerIcon = () => (
 
 // ── Pharmacy Card ─────────────────────────────────────────────────────────────
 const PharmacyCard = React.memo(({ pharmacy, index, onNavigate, compact }) => {
-  const isOpen = true;
+  const isOpen = pharmacy.open_now;
   return (
     <View style={[styles.pharmacyCard, compact && styles.pharmacyCardCompact]}>
       <View style={styles.rankBadge}>
@@ -82,11 +82,24 @@ const PharmacyCard = React.memo(({ pharmacy, index, onNavigate, compact }) => {
           {pharmacy.rating ? <StarRating rating={pharmacy.rating} /> : null}
         </View>
         <View style={styles.statusRow}>
-          <View style={[styles.statusDot, isOpen ? styles.statusDotOpen : styles.statusDotClosed]} />
-          <Text style={[styles.statusText, isOpen ? styles.statusOpen : styles.statusClosed]}>
-            {isOpen ? 'Open' : 'Closed'} · 9:00 PM
+          <View style={[styles.statusDot,
+          isOpen === true ? styles.statusDotOpen :
+            isOpen === false ? styles.statusDotClosed :
+              styles.statusDotUnknown
+          ]} />
+          <Text style={[styles.statusText,
+          isOpen === true ? styles.statusOpen :
+            isOpen === false ? styles.statusClosed :
+              styles.statusUnknown
+          ]}>
+            {isOpen === true ? 'Open now' : isOpen === false ? 'Closed' : 'Hours unknown'}
           </Text>
         </View>
+        {pharmacy.address ? (
+          <Text style={styles.addressText} numberOfLines={1}>
+            {pharmacy.address}
+          </Text>
+        ) : null}
       </View>
 
       <TouchableOpacity style={styles.dirBtn} onPress={() => onNavigate(pharmacy)} activeOpacity={0.8}>
@@ -133,7 +146,6 @@ export default function PharmacyScreen() {
   const [loading, setLoading] = useState(true);
   const [pharmacies, setPharmacies] = useState([]);
   const [mapReady, setMapReady] = useState(false);
-  const [sortBy, setSortBy] = useState('distance');
 
   // ── Web panel toggle ──────────────────────────────────────────
   // Desktop (≥768): panel open by default; mobile web: closed by default
@@ -260,7 +272,10 @@ export default function PharmacyScreen() {
       setPharmacies(
         (data.pharmacies ?? []).map(p => ({
           ...p,
-          distanceKm: getDistanceKm(loc.coords.latitude, loc.coords.longitude, p.latitude, p.longitude),
+          distanceKm: p.distanceKm ?? getDistanceKm(
+            loc.coords.latitude, loc.coords.longitude,
+            p.latitude, p.longitude
+          ),
         }))
       );
     } catch (err) {
@@ -270,29 +285,24 @@ export default function PharmacyScreen() {
     }
   };
 
-  const sortedPharmacies = useMemo(() =>
-    [...pharmacies].sort((a, b) =>
-      sortBy === 'distance'
-        ? a.distanceKm - b.distanceKm
-        : (b.rating ?? 0) - (a.rating ?? 0)
-    ), [pharmacies, sortBy]);
 
   const openDirections = useCallback((pharmacy) => {
     const { latitude, longitude, title } = pharmacy;
     const label = encodeURIComponent(title || 'Pharmacy');
     const googleUrl = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`;
-    const appleUrl = `maps://?daddr=${latitude},${longitude}&q=${label}`;
-    const geoUrl = `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`;
-    Linking.canOpenURL(googleUrl)
-      .then(ok => ok
-        ? Linking.openURL(googleUrl)
-        : Linking.canOpenURL(appleUrl).then(ok2 =>
-          ok2 ? Linking.openURL(appleUrl) : Linking.openURL(geoUrl)
-        ))
-      .catch(() => Alert.alert('Error', 'Could not open maps application.'));
+
+    if (Platform.OS === 'ios') {
+      Linking.openURL(`maps://?daddr=${latitude},${longitude}&q=${label}`)
+        .catch(() => Linking.openURL(googleUrl));
+    } else if (Platform.OS === 'android') {
+      Linking.openURL(`google.navigation:q=${latitude},${longitude}`)
+        .catch(() => Linking.openURL(googleUrl));
+    } else {
+      Linking.openURL(googleUrl);
+    }
   }, []);
 
-  const mapMarkers = sortedPharmacies.map(pharmacy => (
+  const mapMarkers = pharmacies.map(pharmacy => (
     <Marker
       key={pharmacy.id}
       coordinate={{ latitude: pharmacy.latitude, longitude: pharmacy.longitude }}
@@ -398,20 +408,17 @@ export default function PharmacyScreen() {
                     styles.webPanel,
                     isMobileWeb && styles.webPanelMobile,
                   ]}>
-                    <View style={styles.webPanelHeader}>
-                      <SortBar count={sortedPharmacies.length} sortBy={sortBy} setSortBy={setSortBy} />
-                    </View>
                     <View style={styles.sheetDivider} />
                     <ScrollView
                       showsVerticalScrollIndicator={false}
                       contentContainerStyle={styles.webListContent}
                     >
-                      {sortedPharmacies.length === 0 ? (
+                      {pharmacies.length === 0 ? (
                         <View style={styles.emptyState}>
                           <MaterialCommunityIcons name="map-marker-off" size={40} color={COLORS.textSecondary} />
                           <Text style={styles.emptyText}>No pharmacies found nearby</Text>
                         </View>
-                      ) : sortedPharmacies.map((p, i) => (
+                      ) : pharmacies.map((p, i) => (
                         <PharmacyCard
                           key={p.id}
                           pharmacy={p}
@@ -473,7 +480,9 @@ export default function PharmacyScreen() {
                     <View style={styles.dragPillWrap}>
                       <View style={styles.dragPill} />
                     </View>
-                    <SortBar count={sortedPharmacies.length} sortBy={sortBy} setSortBy={setSortBy} />
+                    <View style={{ paddingVertical: 10 }}>
+                      <Text style={styles.sheetTitle}>{pharmacies.length} Pharmacies Nearby</Text>
+                    </View>
                     <View style={styles.hintRow}>
                       <Feather name="chevrons-up" size={13} color={COLORS.textSecondary} />
                       <Text style={styles.hintText}>Drag to reveal list or map</Text>
@@ -489,12 +498,12 @@ export default function PharmacyScreen() {
                     scrollEnabled={scrollEnabled}
                     contentContainerStyle={styles.listContent}
                   >
-                    {sortedPharmacies.length === 0 ? (
+                    {pharmacies.length === 0 ? (
                       <View style={styles.emptyState}>
                         <MaterialCommunityIcons name="map-marker-off" size={40} color={COLORS.textSecondary} />
                         <Text style={styles.emptyText}>No pharmacies found nearby</Text>
                       </View>
-                    ) : sortedPharmacies.map((p, i) => (
+                    ) : pharmacies.map((p, i) => (
                       <PharmacyCard key={p.id} pharmacy={p} index={i} onNavigate={openDirections} />
                     ))}
                   </ScrollView>
@@ -734,4 +743,7 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 4, marginLeft: 10,
   },
+  statusDotUnknown: { backgroundColor: '#94A3B8' },
+  statusUnknown: { color: '#94A3B8' },
+  addressText: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
 });
