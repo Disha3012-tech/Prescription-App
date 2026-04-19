@@ -181,7 +181,7 @@ const MedicineCard = ({ item, index, currency }) => {
 
 // ─── Main Screen ───────────────────────────────────────────────────────────
 export default function PrescriptionDetailScreen({ route, navigation }) {
-  const { record } = route?.params || {};
+  const { record, returnToDashboard } = route?.params || {};
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const imageUri = useMemo(() => {
@@ -222,7 +222,7 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.headerBack}
-            onPress={() => navigation.goBack()}
+            onPress={() => (returnToDashboard ? navigation.navigate('DASHBOARD') : navigation.goBack())}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Feather name="arrow-left" size={20} color={COLORS.textPrimary} />

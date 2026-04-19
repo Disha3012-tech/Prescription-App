@@ -836,6 +836,7 @@ async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
 
     return {
         "status": "success", 
+        "prescription_id": new_record.id if new_record is not None else None,
         "results": results,
         "country": req.country,
         "currency": req.currency,

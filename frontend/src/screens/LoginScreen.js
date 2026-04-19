@@ -171,6 +171,24 @@ export default function LoginScreen({ navigate, goBack, setUser }) {
     })
   ).current;
 
+  const mouseX = useRef(new Animated.Value(0)).current;
+  const mouseY = useRef(new Animated.Value(0)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (evt, gestureState) => {
+        mouseX.setValue(gestureState.moveX - width / 2);
+        mouseY.setValue(gestureState.moveY - height / 2);
+      },
+      onPanResponderRelease: () => {
+        Animated.spring(mouseX, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
+        Animated.spring(mouseY, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
+      },
+    })
+  ).current;
+
   const handleLogin = async () => {
     if (!email || !password) { setErrorMsg('Credentials required'); return; }
     setLoading(true);
