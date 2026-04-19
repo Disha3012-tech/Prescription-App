@@ -121,12 +121,25 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
             const data = await res.json();
 
             if (res.ok && data.status === 'success') {
-                if (isEditing) {
-                    // Go back to History (pop Confirm off the stack)
-                    navigation.goBack();
-                } else {
-                    navigation.goBack();
-                }
+                const fullResults = data.results || [];
+                const record = {
+                    id: data.prescription_id || prescriptionId || null,
+                    date: new Date().toISOString(),
+                    condition: rawResult?.results?.[0]?.explanation?.brand_name || 'Prescription Scan',
+                    doctor: rawResult?.results?.[0]?.explanation?.brand_name || 'Prescription Scan',
+                    medicines: fullResults.map(r => r.medicine || r.name || 'Medicine'),
+                    fullResults,
+                    raw_text: rawResult?.raw_text,
+                    avg_confidence: rawResult?.avg_confidence,
+                    country,
+                    currency,
+                    image_url: route.params.image_url || rawResult?.image_url || null,
+                };
+
+                navigation.navigate('PRESCRIPTION_DETAIL', {
+                    record,
+                    returnToDashboard: !isEditing,
+                });
             } else {
                 Alert.alert('Error', data.message || 'Failed to save prescription.');
             }
