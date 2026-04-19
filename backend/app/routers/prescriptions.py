@@ -10,8 +10,14 @@ from fastapi import HTTPException
 router = APIRouter(prefix="/api/prescriptions", tags=["Prescriptions"])
 
 @router.get("/history", response_model=schemas.HistoryResponse)
-async def get_history(user_id: str, db: Session = Depends(get_db)):
-    rows = db.query(models.Prescription).filter(models.Prescription.user_id == user_id).order_by(models.Prescription.date.desc()).all()
+async def get_history(user_id: str, member_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Prescription).filter(models.Prescription.user_id == user_id)
+    if member_id:
+        query = query.filter(models.Prescription.member_id == member_id)
+    else:
+        query = query.filter(models.Prescription.member_id == None)
+    
+    rows = query.order_by(models.Prescription.date.desc()).all()
     
     history = []
     for row in rows:
@@ -29,6 +35,7 @@ async def get_history(user_id: str, db: Session = Depends(get_db)):
 
 class ManualPrescriptionRequest(BaseModel):
     user_id: str
+    member_id: Optional[str] = None
     condition: str
     doctor: Optional[str] = "Unknown Doctor"
     notes: Optional[str] = ""
@@ -49,6 +56,8 @@ async def create_manual_prescription(req: ManualPrescriptionRequest, db: Session
                 "what_it_does": req.notes
             }
         }]),
+        doctor=req.doctor,
+        member_id=req.member_id,
         country="Manual",
         currency="N/A"
     )
@@ -91,6 +100,7 @@ async def update_prescription(prescription_id: str, req: EditPrescriptionRequest
         nm = models.Medication(
             user_id=record.user_id,
             prescription_id=prescription_id,
+            member_id=record.member_id,
             name=med_name,
             dose=med_dose,
             color=c["color"],

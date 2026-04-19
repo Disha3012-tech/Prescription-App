@@ -159,17 +159,17 @@ export default function App() {
       case 'DASHBOARD': return <DashboardScreen user={user} navigate={navigate} goBack={goBack} currentScreen={screen} />;
       case 'SCANNER': return <ScannerScreen navigate={navigate} goBack={goBack} user={user} route={{ params: routeParams }} />;
       case 'DRUG_INTERACTION': return <DrugInteractionScreen navigate={navigate} goBack={goBack} />;
-      case 'DOSE_TRACKER': return <DoseTrackerScreen user={user} navigate={navigate} goBack={goBack} currentScreen={screen} />;
+      case 'DOSE_TRACKER': return <DoseTrackerScreen user={user} navigate={navigate} goBack={goBack} currentScreen={screen} memberId={routeParams.memberId} memberName={routeParams.memberName} />;
       case 'ASK_AI': return <AskAIScreen navigate={navigate} goBack={goBack} />;
-      case 'HISTORY': return <MedicalHistoryScreen user={user} navigate={navigate} goBack={goBack} />;
+      case 'HISTORY': return <MedicalHistoryScreen user={user} navigate={navigate} goBack={goBack} memberId={routeParams.memberId} memberName={routeParams.memberName} />;
       case 'PHARMACY': return <PharmacyScreen navigate={navigate} goBack={goBack} />;
       case 'PROFILE': return <ProfileScreen user={user} setUser={handleSetUser} navigate={navigate} goBack={goBack} />;
       case 'CONFIRM_MEDICINES': return <ConfirmMedicinesScreen route={{ params: routeParams }} navigation={{ navigate, goBack }} />;
       case 'PRESCRIPTION_DETAIL': return <PrescriptionDetailScreen route={{ params: routeParams }} navigation={{ navigate, goBack }} />;
-      case 'PRESCRIPTION_TIMELINE': return <PrescriptionTimelineScreen user={user} navigate={navigate} goBack={goBack} />;
+      case 'PRESCRIPTION_TIMELINE': return <PrescriptionTimelineScreen user={user} navigate={navigate} goBack={goBack} memberId={routeParams.memberId} memberName={routeParams.memberName} />;
       case 'FAMILY_PROFILE': return <FamilyProfileScreen user={user} navigate={navigate} goBack={goBack} />;
       case 'MEDICINE_EXPLAINER': return <MedicineExplainerScreen navigate={navigate} goBack={goBack} user={user} medicines={routeParams.medicines} />;
-      case 'REFILL_REMINDER': return <RefillReminderScreen user={user} navigate={navigate} goBack={goBack} />;
+      case 'REFILL_REMINDER': return <RefillReminderScreen user={user} navigate={navigate} goBack={goBack} memberId={routeParams.memberId} memberName={routeParams.memberName} />;
       case 'SYMPTOM_LOOKUP': return <SymptomLookupScreen navigate={navigate} goBack={goBack} user={user} />;
       default: return <LandingScreen navigate={navigate} goBack={goBack} />;
     }

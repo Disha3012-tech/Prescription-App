@@ -17,10 +17,17 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 
-const MedicineCard = ({ item, index, cardAnim }) => {
+const getCurrencySymbol = (code) => {
+  const map = { 'INR': '₹', 'USD': '$', 'GBP': '£', 'EUR': '€', 'CAD': 'C$', 'AUD': 'A$' };
+  return map[code] || code;
+};
+
+const MedicineCard = ({ item, index, cardAnim, currency }) => {
   const [expanded, setExpanded] = useState(false);
   const [showSimple, setShowSimple] = useState(true);
   const exp = item.explanation || {};
+  const symbol = getCurrencySymbol(currency);
+  const mainPrice = parseFloat(exp.approximate_price);
 
   const toggle = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -123,28 +130,42 @@ const MedicineCard = ({ item, index, cardAnim }) => {
 
           {exp.approximate_price && (
             <View style={styles.priceRow}>
-              <MaterialCommunityIcons name="cash" size={16} color="#059669" />
-              <Text style={styles.priceText}>Approx: {exp.approximate_price}</Text>
+              <MaterialCommunityIcons name="cash" size={16} color={COLORS.primary} />
+              <Text style={styles.priceText}>
+                Price: {symbol} {exp.approximate_price}
+              </Text>
             </View>
           )}
 
-          {(exp.alternatives || []).length > 0 && (
+          {(exp.generics || exp.alternatives || []).length > 0 && (
             <>
               <View style={[styles.badgeHeader, { marginTop: 14 }]}>
                 <MaterialCommunityIcons name="swap-horizontal" size={15} color={COLORS.primary} />
                 <Text style={[styles.badgeHeaderText, { color: COLORS.primary }]}>CHEAPER ALTERNATIVES</Text>
               </View>
-              {exp.alternatives.map((alt, i) => (
-                <View key={i} style={styles.altCard}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.altName}>{alt.name}</Text>
-                    <Text style={styles.altType}>{alt.type}</Text>
+              {(exp.generics || exp.alternatives || []).map((alt, i) => {
+                const altPrice = alt.genericPrice || alt.approximate_price;
+                const savings = alt.savingPct || (mainPrice > 0 ? Math.round(((mainPrice - parseFloat(altPrice)) / mainPrice) * 100) : null);
+                
+                return (
+                  <View key={i} style={styles.altCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.altName}>{alt.name}</Text>
+                      <Text style={styles.altType}>{alt.manufacturer || alt.type || 'Generic'}</Text>
+                    </View>
+                    {altPrice && (
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={styles.altPrice}>{symbol} {altPrice}</Text>
+                        {savings > 0 && (
+                          <View style={styles.saveBadge}>
+                            <Text style={styles.saveText}>Save {savings}%</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </View>
-                  {alt.approximate_price && (
-                    <Text style={styles.altPrice}>{alt.approximate_price}</Text>
-                  )}
-                </View>
-              ))}
+                );
+              })}
             </>
           )}
         </View>
@@ -153,7 +174,7 @@ const MedicineCard = ({ item, index, cardAnim }) => {
   );
 };
 
-export default function ScannerScreen({ navigate, user, route }) {
+export default function ScannerScreen({ navigate, goBack, user, route }) {
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(route?.params?.analysisResult || null);
@@ -234,6 +255,7 @@ export default function ScannerScreen({ navigate, user, route }) {
         imageUri: uri, medicineHighlights: data.medicine_highlights,
         rawResult: data, country: selectedCountry.value,
         currency: selectedCountry.currency, userId: user?.id, 
+        memberId: route?.params?.memberId,
         image_url: data.image_url, image_hash: data.image_hash,
       });
     } catch (err) {
@@ -293,6 +315,9 @@ export default function ScannerScreen({ navigate, user, route }) {
   if (result) {
     return (
       <View style={styles.container}>
+        <TouchableOpacity onPress={() => goBack()} style={styles.scannerBackBtn}>
+          <Feather name="arrow-left" size={22} color="#fff" />
+        </TouchableOpacity>
         <LinearGradient colors={['#0A1628', '#0F2535']} style={styles.resultsHeader}>
           <View style={styles.resultsHeaderTop}>
             <View>
@@ -313,6 +338,7 @@ export default function ScannerScreen({ navigate, user, route }) {
             <MedicineCard
               key={i} item={med} index={i}
               cardAnim={cardAnims.current[i] || new Animated.Value(1)}
+              currency={result.currency}
             />
           ))}
           <View style={styles.disclaimer}>
@@ -327,6 +353,9 @@ export default function ScannerScreen({ navigate, user, route }) {
   // ── Upload Screen ──
   return (
     <View style={styles.container}>
+      <TouchableOpacity onPress={() => goBack()} style={styles.scannerBackBtn}>
+        <Feather name="arrow-left" size={22} color="#fff" />
+      </TouchableOpacity>
       <LinearGradient colors={['#0A1628', '#0F2535']} style={styles.uploadHeader}>
         <View style={styles.bgCircle} />
         <MaterialCommunityIcons name="scan-helper" size={48} color="rgba(13,148,136,0.4)" style={{ marginBottom: 12 }} />
@@ -401,6 +430,12 @@ export default function ScannerScreen({ navigate, user, route }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  scannerBackBtn: {
+    position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, left: 16,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center',
+    zIndex: 99,
+  },
 
   // Upload
   uploadHeader: {
@@ -553,13 +588,15 @@ const styles = StyleSheet.create({
     padding: 12, borderRadius: 12, borderWidth: 1, borderColor: COLORS.dangerBorder,
   },
   warningText: { flex: 1, fontSize: 13, color: COLORS.dangerText, lineHeight: 19 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  priceText: { fontSize: 14, color: '#059669', fontWeight: '700' },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  priceText: { fontSize: 16, color: COLORS.primary, fontWeight: '900' },
   altCard: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: COLORS.successBg, padding: 12, borderRadius: 12,
   },
   altName: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary },
   altType: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  altPrice: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
+  altPrice: { fontSize: 15, fontWeight: '900', color: '#059669' },
+  saveBadge: { backgroundColor: '#10B981', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4 },
+  saveText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 });

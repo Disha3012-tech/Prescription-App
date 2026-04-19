@@ -8,7 +8,7 @@ import { API_URL } from '../config';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 export default function ConfirmMedicinesScreen({ route, navigation }) {
-    const { imageUri, medicineHighlights, rawResult, country, currency, userId, prescriptionId, isEditing, image_hash } = route.params;
+    const { imageUri, medicineHighlights, rawResult, country, currency, userId, memberId, prescriptionId, isEditing, image_hash } = route.params;
     const [confirmed, setConfirmed] = useState(
         medicineHighlights.reduce((acc, m) => {
             acc[m.medicine] = true;
@@ -17,7 +17,12 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
     );
     const [editableMeds, setEditableMeds] = useState(
         rawResult.results.reduce((acc, r) => {
-            acc[r.name] = { dosage: r.dosage || '', frequency: r.frequency || '' };
+            acc[r.name] = { 
+                name: r.name,
+                dosage: r.dosage || '', 
+                frequency: r.frequency || '',
+                duration: r.duration || ''
+            };
             return acc;
         }, {})
     );
@@ -76,11 +81,11 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
         const confirmedMeds = rawResult.results
             .filter(r => confirmed[r.name])
             .map(r => ({
-                name: r.name,
+                name: editableMeds[r.name]?.name || r.name,
                 form: r.form,
                 dosage: editableMeds[r.name]?.dosage || r.dosage || '',
                 frequency: editableMeds[r.name]?.frequency || r.frequency || '',
-                duration: r.duration,
+                duration: editableMeds[r.name]?.duration || r.duration || '',
             }));
 
         if (confirmedMeds.length === 0) {
@@ -102,7 +107,8 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
                     avg_confidence: rawResult.avg_confidence,
                     image_url: route.params.image_url,
                     image_hash: image_hash,
-                    prescription_id: prescriptionId
+                    prescription_id: prescriptionId,
+                    member_id: memberId
                 }),
             });
             const data = await res.json();
@@ -202,6 +208,16 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
                             {isOn && editableMeds[m.medicine] && (
                                 <View style={styles.editForm}>
                                     <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Medicine Name</Text>
+                                        <TextInput
+                                            style={styles.textInput}
+                                            value={editableMeds[m.medicine].name}
+                                            onChangeText={(t) => updateMed(m.medicine, 'name', t)}
+                                            placeholder="Medicine name"
+                                            placeholderTextColor="#9CA3AF"
+                                        />
+                                    </View>
+                                    <View style={styles.inputGroup}>
                                         <Text style={styles.inputLabel}>Dosage</Text>
                                         <TextInput
                                             style={styles.textInput}
@@ -218,6 +234,16 @@ export default function ConfirmMedicinesScreen({ route, navigation }) {
                                             value={editableMeds[m.medicine].frequency}
                                             onChangeText={(t) => updateMed(m.medicine, 'frequency', t)}
                                             placeholder="e.g. Twice a day"
+                                            placeholderTextColor="#9CA3AF"
+                                        />
+                                    </View>
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Duration</Text>
+                                        <TextInput
+                                            style={styles.textInput}
+                                            value={editableMeds[m.medicine].duration}
+                                            onChangeText={(t) => updateMed(m.medicine, 'duration', t)}
+                                            placeholder="e.g. 5 days"
                                             placeholderTextColor="#9CA3AF"
                                         />
                                     </View>
@@ -270,8 +296,12 @@ const styles = StyleSheet.create({
         backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB'
     },
     toggleOn: { backgroundColor: '#10B981', borderColor: '#10B981' },
-    editForm: { marginTop: 12, flexDirection: 'row', gap: 10, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#D1FAE5' },
-    inputGroup: { flex: 1 },
+    editForm: { 
+        marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', 
+        gap: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#D1FAE5',
+        justifyContent: 'space-between'
+    },
+    inputGroup: { width: '48%', marginBottom: 8 },
     inputLabel: { fontSize: 11, color: '#065F46', fontWeight: '600', marginBottom: 4 },
     textInput: {
         backgroundColor: '#fff', borderWidth: 1, borderColor: '#A7F3D0', borderRadius: 8,

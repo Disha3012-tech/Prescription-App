@@ -746,6 +746,7 @@ class ConfirmRequest(BaseModel):
     image_url: Optional[str] = None
     image_hash: Optional[str] = None
     prescription_id: Optional[str] = None
+    member_id: Optional[str] = None
 
 @app.post("/confirm-medicines")
 async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
@@ -780,7 +781,8 @@ async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
                 country=req.country,
                 currency=req.currency,
                 image_url=req.image_url,
-                image_hash=req.image_hash
+                image_hash=req.image_hash,
+                member_id=req.member_id
             )
             db.add(new_record)
         db.commit()
@@ -803,7 +805,8 @@ async def confirm_medicines(req: ConfirmRequest, db: Session = Depends(get_db)):
                 dose=r.get("dosage", "Standard dose"),
                 color=c["color"],
                 color_bg=c["bg"],
-                explanation_json=json.dumps(r) # Cache explanation during scan
+                explanation_json=json.dumps(r), # Cache explanation during scan
+                member_id=req.member_id
             )
             db.add(new_med)
             db.commit()

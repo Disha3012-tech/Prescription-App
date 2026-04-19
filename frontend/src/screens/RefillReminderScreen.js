@@ -1,24 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    SafeAreaView, StatusBar, Switch, ActivityIndicator, Animated,
-    Alert, TextInput, Modal, Platform,
+    SafeAreaView, StatusBar, Switch, ActivityIndicator, Animated, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, GRADIENTS, SHADOWS } from '../theme';
 import { MaterialCommunityIcons, Feather, Ionicons } from '@expo/vector-icons';
 import { API_URL } from '../config';
 
-// ─── Refill Status Bar ──────────────────────────────────────────────────────────
+// ─── Refill Bar ────────────────────────────────────────────────────────────────
 const RefillBar = ({ remaining, total, threshold }) => {
     const pct = total > 0 ? (remaining / total) * 100 : 0;
     const isCritical = remaining <= threshold;
-    const isLow = remaining <= threshold * 2;
+    const isLow = remaining <= threshold * 2 && !isCritical;
     const color = isCritical ? COLORS.dangerText : isLow ? COLORS.warningText : COLORS.primary;
     const barColors = isCritical
         ? ['#DC2626', '#EF4444']
         : isLow ? ['#D97706', '#F59E0B']
-        : ['#0D9488', '#0891B2'];
+            : ['#0D9488', '#0891B2'];
 
     return (
         <View style={rb.wrap}>
@@ -38,7 +37,7 @@ const rb = StyleSheet.create({
     label: { fontSize: 11, fontWeight: '700', minWidth: 44, textAlign: 'right' },
 });
 
-// ─── Med Refill Card ────────────────────────────────────────────────────────────
+// ─── Med Refill Card ───────────────────────────────────────────────────────────
 const MedRefillCard = ({ med, onToggleReminder, onUpdateQuantity }) => {
     const remaining = med.remaining_quantity ?? med.total_quantity ?? 30;
     const total = med.total_quantity ?? 30;
@@ -63,16 +62,12 @@ const MedRefillCard = ({ med, onToggleReminder, onUpdateQuantity }) => {
             )}
 
             <View style={mrc.row}>
-                {/* Color dot */}
                 <View style={[mrc.colorDot, { backgroundColor: med.color || COLORS.primary }]} />
-
                 <View style={{ flex: 1 }}>
                     <Text style={mrc.medName}>{med.name}</Text>
                     <Text style={mrc.medDose}>{med.dose}</Text>
                     <RefillBar remaining={remaining} total={total} threshold={threshold} />
                 </View>
-
-                {/* Controls */}
                 <View style={mrc.controls}>
                     <TouchableOpacity style={mrc.qtyBtn} onPress={() => onUpdateQuantity(med.id, Math.max(0, remaining - 1))}>
                         <Feather name="minus" size={12} color={COLORS.textSecondary} />
@@ -84,13 +79,12 @@ const MedRefillCard = ({ med, onToggleReminder, onUpdateQuantity }) => {
                 </View>
             </View>
 
-            {/* Reminder toggle */}
             <View style={mrc.reminderRow}>
                 <Ionicons name="notifications-outline" size={14} color={COLORS.textSecondary} />
                 <Text style={mrc.reminderLabel}>Refill reminder</Text>
                 <Switch
                     value={isOn}
-                    onValueChange={(val) => onToggleReminder(med.id, val)}
+                    onValueChange={val => onToggleReminder(med.id, val)}
                     trackColor={{ false: COLORS.border, true: COLORS.primary + '60' }}
                     thumbColor={isOn ? COLORS.primary : '#f4f3f4'}
                     style={{ transform: [{ scale: 0.8 }] }}
@@ -100,38 +94,23 @@ const MedRefillCard = ({ med, onToggleReminder, onUpdateQuantity }) => {
     );
 };
 const mrc = StyleSheet.create({
-    card: {
-        backgroundColor: COLORS.white, borderRadius: 18, marginBottom: 12,
-        borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', ...SHADOWS.sm,
-    },
+    card: { backgroundColor: COLORS.white, borderRadius: 18, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border, overflow: 'hidden', ...SHADOWS.sm },
     cardCritical: { borderColor: COLORS.dangerBorder },
     cardLow: { borderColor: COLORS.warningBorder },
-    urgentBanner: {
-        flexDirection: 'row', alignItems: 'center', gap: 6,
-        paddingHorizontal: 14, paddingVertical: 8,
-    },
+    urgentBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8 },
     urgentText: { fontSize: 12, fontWeight: '700' },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
     colorDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0, marginTop: -2 },
     medName: { fontSize: 14, fontWeight: '800', color: COLORS.textPrimary },
     medDose: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
     controls: { flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0 },
-    qtyBtn: {
-        width: 26, height: 26, borderRadius: 8,
-        backgroundColor: COLORS.lightGray, justifyContent: 'center', alignItems: 'center',
-        borderWidth: 1, borderColor: COLORS.border,
-    },
+    qtyBtn: { width: 26, height: 26, borderRadius: 8, backgroundColor: COLORS.lightGray, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
     qtyVal: { fontSize: 14, fontWeight: '900', color: COLORS.textPrimary, minWidth: 20, textAlign: 'center' },
-    reminderRow: {
-        flexDirection: 'row', alignItems: 'center', gap: 8,
-        paddingHorizontal: 14, paddingVertical: 10,
-        borderTopWidth: 1, borderTopColor: COLORS.border,
-        backgroundColor: COLORS.lightGray,
-    },
+    reminderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.lightGray },
     reminderLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary, flex: 1 },
 });
 
-// ─── Summary Pill ───────────────────────────────────────────────────────────────
+// ─── Summary Pill ──────────────────────────────────────────────────────────────
 const SummaryPill = ({ icon, value, label, color }) => (
     <View style={sp.pill}>
         <MaterialCommunityIcons name={icon} size={16} color={color} />
@@ -140,17 +119,16 @@ const SummaryPill = ({ icon, value, label, color }) => (
     </View>
 );
 const sp = StyleSheet.create({
-    pill: {
-        flex: 1, alignItems: 'center', gap: 4,
-        backgroundColor: COLORS.white, borderRadius: 14, padding: 12,
-        borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm,
-    },
+    pill: { flex: 1, alignItems: 'center', gap: 4, backgroundColor: COLORS.white, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm },
     val: { fontSize: 22, fontWeight: '900' },
     label: { fontSize: 10, fontWeight: '600', color: COLORS.textMuted, textAlign: 'center' },
 });
 
-// ─── Main Screen ────────────────────────────────────────────────────────────────
-export default function RefillReminderScreen({ user, navigate, goBack }) {
+// ─── Main Screen ───────────────────────────────────────────────────────────────
+export default function RefillReminderScreen({ user, navigate, goBack, memberId: propMemberId, memberName: propMemberName }) {
+    const [activeMemberId, setActiveMemberId] = useState(propMemberId || null);
+    const [activeMemberName, setActiveMemberName] = useState(propMemberName || null);
+
     const [meds, setMeds] = useState([]);
     const [loading, setLoading] = useState(true);
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -158,12 +136,20 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
     useEffect(() => {
         Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
         fetchMeds();
-    }, []);
+    }, [activeMemberId]);
+
+    useEffect(() => {
+        setActiveMemberId(propMemberId || null);
+        setActiveMemberName(propMemberName || null);
+    }, [propMemberId, propMemberName]);
 
     const fetchMeds = async () => {
         if (!user?.id) { setLoading(false); return; }
         try {
-            const res = await fetch(`${API_URL}api/medications?user_id=${user.id}`);
+            let url = `${API_URL}api/medications?user_id=${user.id}`;
+            if (activeMemberId) url += `&member_id=${activeMemberId}`;
+
+            const res = await fetch(url);
             const data = await res.json();
             if (Array.isArray(data)) setMeds(data);
         } catch (e) {
@@ -174,7 +160,6 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
     };
 
     const updateQuantity = async (medId, newQty) => {
-        // Optimistic update
         setMeds(prev => prev.map(m => m.id === medId ? { ...m, remaining_quantity: newQty } : m));
         try {
             await fetch(`${API_URL}api/medications/${medId}/refill`, {
@@ -182,9 +167,7 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ remaining_quantity: newQty }),
             });
-        } catch (e) {
-            console.error('Update quantity error', e);
-        }
+        } catch (e) { console.error('Update quantity error', e); }
     };
 
     const toggleReminder = async (medId, isOn) => {
@@ -195,9 +178,7 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_refill_reminder_on: isOn }),
             });
-        } catch (e) {
-            console.error('Toggle reminder error', e);
-        }
+        } catch (e) { console.error('Toggle reminder error', e); }
     };
 
     const criticalCount = meds.filter(m => (m.remaining_quantity ?? 30) <= (m.refill_threshold ?? 5)).length;
@@ -208,11 +189,14 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
     }).length;
     const okCount = meds.length - criticalCount - lowCount;
 
-    const sortedMeds = [...meds].sort((a, b) => {
-        const ra = a.remaining_quantity ?? 30;
-        const rb = b.remaining_quantity ?? 30;
-        return ra - rb;
-    });
+    const sortedMeds = [...meds].sort((a, b) =>
+        (a.remaining_quantity ?? 30) - (b.remaining_quantity ?? 30)
+    );
+
+    const screenTitle = activeMemberName ? `${activeMemberName}'s Refills` : 'Refill Reminders';
+    const screenSub = activeMemberName
+        ? `Medicine stock levels for ${activeMemberName}`
+        : 'Track medicine stock levels';
 
     return (
         <SafeAreaView style={styles.container}>
@@ -222,17 +206,39 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
             <LinearGradient colors={GRADIENTS.hero} style={styles.header}>
                 <View style={styles.bgDeco} />
                 <View style={styles.headerTop}>
-                    <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
+                    <TouchableOpacity
+                        onPress={() => (goBack ? goBack() : navigate('FAMILY_PROFILE'))}
+                        style={styles.backBtn}
+                    >
                         <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
                     <View style={{ flex: 1, paddingLeft: 14 }}>
-                        <Text style={styles.headerTitle}>Refill Reminders</Text>
-                        <Text style={styles.headerSub}>Track medicine stock levels</Text>
+                        <Text style={styles.headerTitle}>{screenTitle}</Text>
+                        <Text style={styles.headerSub}>{screenSub}</Text>
                     </View>
+                    {activeMemberId && (
+                        <TouchableOpacity
+                            style={styles.switchBtn}
+                            onPress={() => { setActiveMemberId(null); setActiveMemberName(null); }}
+                        >
+                            <Feather name="user" size={12} color="rgba(255,255,255,0.8)" />
+                            <Text style={styles.switchBtnText}>Mine</Text>
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity style={styles.refreshBtn} onPress={fetchMeds}>
                         <Feather name="refresh-cw" size={16} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
                 </View>
+
+                {/* Member pill in header */}
+                {activeMemberName && (
+                    <View style={styles.memberPill}>
+                        <LinearGradient colors={['#7C3AED', '#6D28D9']} style={styles.memberPillAvatar}>
+                            <Text style={styles.memberPillAvatarText}>{activeMemberName[0].toUpperCase()}</Text>
+                        </LinearGradient>
+                        <Text style={styles.memberPillText}>Viewing {activeMemberName}'s medicines</Text>
+                    </View>
+                )}
 
                 {/* Status chips */}
                 {!loading && meds.length > 0 && (
@@ -262,7 +268,9 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
             {loading ? (
                 <View style={styles.centerBox}>
                     <ActivityIndicator size="large" color={COLORS.primary} />
-                    <Text style={styles.loadingText}>Loading medicines...</Text>
+                    <Text style={styles.loadingText}>
+                        Loading {activeMemberName ? `${activeMemberName}'s` : 'your'} medicines...
+                    </Text>
                 </View>
             ) : (
                 <Animated.ScrollView
@@ -290,9 +298,18 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
                     {meds.length === 0 ? (
                         <View style={styles.emptyBox}>
                             <MaterialCommunityIcons name="prescription-outline" size={48} color={COLORS.border} />
-                            <Text style={styles.emptyTitle}>No medicines tracked</Text>
-                            <Text style={styles.emptyText}>Scan a prescription or add medicines in Dose Tracker to enable refill reminders.</Text>
-                            <TouchableOpacity style={styles.scanCta} onPress={() => navigate('SCANNER')}>
+                            <Text style={styles.emptyTitle}>
+                                {activeMemberName ? `No medicines for ${activeMemberName}` : 'No medicines tracked'}
+                            </Text>
+                            <Text style={styles.emptyText}>
+                                {activeMemberName
+                                    ? `Scan a prescription or add medicines in ${activeMemberName}'s Dose Tracker to enable refill reminders.`
+                                    : 'Scan a prescription or add medicines in Dose Tracker to enable refill reminders.'}
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.scanCta}
+                                onPress={() => navigate('SCANNER', activeMemberId ? { memberId: activeMemberId } : undefined)}
+                            >
                                 <LinearGradient colors={GRADIENTS.teal} style={styles.scanCtaGrad}>
                                     <Feather name="camera" size={16} color="#fff" />
                                     <Text style={styles.scanCtaText}>Scan Prescription</Text>
@@ -301,43 +318,46 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
                         </View>
                     ) : (
                         <>
-                            {criticalCount > 0 && <Text style={styles.groupLabel}>🚨 Needs Refill Now</Text>}
-                            {sortedMeds.filter(m => (m.remaining_quantity ?? 30) <= (m.refill_threshold ?? 5)).map(med => (
-                                <MedRefillCard
-                                    key={med.id}
-                                    med={med}
-                                    onToggleReminder={toggleReminder}
-                                    onUpdateQuantity={updateQuantity}
-                                />
-                            ))}
+                            {criticalCount > 0 && (
+                                <>
+                                    <Text style={styles.groupLabel}>🚨 Needs Refill Now</Text>
+                                    {sortedMeds
+                                        .filter(m => (m.remaining_quantity ?? 30) <= (m.refill_threshold ?? 5))
+                                        .map(med => (
+                                            <MedRefillCard key={med.id} med={med} onToggleReminder={toggleReminder} onUpdateQuantity={updateQuantity} />
+                                        ))}
+                                </>
+                            )}
 
-                            {lowCount > 0 && <Text style={[styles.groupLabel, { marginTop: 8 }]}>⚠️ Running Low</Text>}
-                            {sortedMeds.filter(m => {
-                                const r = m.remaining_quantity ?? 30;
-                                const t = m.refill_threshold ?? 5;
-                                return r > t && r <= t * 2;
-                            }).map(med => (
-                                <MedRefillCard
-                                    key={med.id}
-                                    med={med}
-                                    onToggleReminder={toggleReminder}
-                                    onUpdateQuantity={updateQuantity}
-                                />
-                            ))}
+                            {lowCount > 0 && (
+                                <>
+                                    <Text style={[styles.groupLabel, { marginTop: 8 }]}>⚠️ Running Low</Text>
+                                    {sortedMeds
+                                        .filter(m => {
+                                            const r = m.remaining_quantity ?? 30;
+                                            const t = m.refill_threshold ?? 5;
+                                            return r > t && r <= t * 2;
+                                        })
+                                        .map(med => (
+                                            <MedRefillCard key={med.id} med={med} onToggleReminder={toggleReminder} onUpdateQuantity={updateQuantity} />
+                                        ))}
+                                </>
+                            )}
 
-                            {okCount > 0 && <Text style={[styles.groupLabel, { marginTop: 8 }]}>✅ Well Stocked</Text>}
-                            {sortedMeds.filter(m => {
-                                const r = m.remaining_quantity ?? 30;
-                                const t = m.refill_threshold ?? 5;
-                                return r > t * 2;
-                            }).map(med => (
-                                <MedRefillCard
-                                    key={med.id}
-                                    med={med}
-                                    onToggleReminder={toggleReminder}
-                                    onUpdateQuantity={updateQuantity}
-                                />
-                            ))}
+                            {okCount > 0 && (
+                                <>
+                                    <Text style={[styles.groupLabel, { marginTop: 8 }]}>✅ Well Stocked</Text>
+                                    {sortedMeds
+                                        .filter(m => {
+                                            const r = m.remaining_quantity ?? 30;
+                                            const t = m.refill_threshold ?? 5;
+                                            return r > t * 2;
+                                        })
+                                        .map(med => (
+                                            <MedRefillCard key={med.id} med={med} onToggleReminder={toggleReminder} onUpdateQuantity={updateQuantity} />
+                                        ))}
+                                </>
+                            )}
                         </>
                     )}
 
@@ -347,7 +367,8 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
                         <View style={{ flex: 1 }}>
                             <Text style={styles.infoTitle}>How Refill Tracking Works</Text>
                             <Text style={styles.infoText}>
-                                Use the ± buttons to track how many pills you have left. You'll be alerted when stock falls below your threshold (default 5). Set a reminder to get a notification when it's time to refill.
+                                Use the ± buttons to track how many pills are left. You'll be alerted when stock falls below the threshold (default 5).
+                                {activeMemberName ? ` Reminders apply to ${activeMemberName}'s medicines.` : ''}
                             </Text>
                         </View>
                     </LinearGradient>
@@ -360,52 +381,38 @@ export default function RefillReminderScreen({ user, navigate, goBack }) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.background },
     header: { paddingBottom: 16, overflow: 'hidden', position: 'relative' },
-    bgDeco: {
-        position: 'absolute', width: 200, height: 200, borderRadius: 100,
-        backgroundColor: 'rgba(13,148,136,0.1)', top: -60, right: -60,
-    },
-    headerTop: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingTop: 20, paddingBottom: 14 },
-    backBtn: {
-        width: 40, height: 40, borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
-    },
-    refreshBtn: {
-        width: 40, height: 40, borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
-    },
+    bgDeco: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(13,148,136,0.1)', top: -60, right: -60 },
+    headerTop: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 14, gap: 8 },
+    backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+    refreshBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+    switchBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+    switchBtnText: { fontSize: 11, fontWeight: '700', color: '#fff' },
     headerTitle: { fontSize: 20, fontWeight: '900', color: '#fff' },
     headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
+
+    memberPill: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginBottom: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+    memberPillAvatar: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    memberPillAvatarText: { fontSize: 11, fontWeight: '900', color: '#fff' },
+    memberPillText: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
+
     statusRow: { paddingHorizontal: 20, gap: 8, paddingBottom: 4 },
-    statusChip: {
-        flexDirection: 'row', alignItems: 'center', gap: 5,
-        paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1,
-    },
+    statusChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
     statusText: { fontSize: 12, fontWeight: '700' },
 
     centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
     loadingText: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '600' },
 
     summaryRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-
     groupLabel: { fontSize: 14, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 10 },
 
-    emptyBox: {
-        alignItems: 'center', padding: 40, gap: 10,
-        backgroundColor: COLORS.white, borderRadius: 24,
-        borderWidth: 1, borderColor: COLORS.border,
-    },
+    emptyBox: { alignItems: 'center', padding: 40, gap: 10, backgroundColor: COLORS.white, borderRadius: 24, borderWidth: 1, borderColor: COLORS.border },
     emptyTitle: { fontSize: 18, fontWeight: '800', color: COLORS.textPrimary },
     emptyText: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20 },
     scanCta: { marginTop: 8, borderRadius: 14, overflow: 'hidden' },
     scanCtaGrad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 13 },
     scanCtaText: { fontSize: 15, fontWeight: '800', color: '#fff' },
 
-    infoCard: {
-        flexDirection: 'row', gap: 12, borderRadius: 18, padding: 16,
-        marginTop: 16, alignItems: 'flex-start',
-    },
+    infoCard: { flexDirection: 'row', gap: 12, borderRadius: 18, padding: 16, marginTop: 16, alignItems: 'flex-start' },
     infoTitle: { fontSize: 14, fontWeight: '800', color: '#fff', marginBottom: 4 },
     infoText: { fontSize: 12, color: 'rgba(255,255,255,0.7)', lineHeight: 18 },
 });

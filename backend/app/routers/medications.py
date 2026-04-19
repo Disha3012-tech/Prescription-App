@@ -8,9 +8,13 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/api/medications", tags=["Medications"])
 
 @router.get("", response_model=List[schemas.MedicationResponse])
-async def get_medications(user_id: str, db: Session = Depends(get_db)):
-    meds = db.query(models.Medication).filter(models.Medication.user_id == user_id).all()
-    return meds
+async def get_medications(user_id: str, member_id: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Medication).filter(models.Medication.user_id == user_id)
+    if member_id:
+        query = query.filter(models.Medication.member_id == member_id)
+    else:
+        query = query.filter(models.Medication.member_id == None)
+    return query.all()
 
 @router.post("", response_model=schemas.MedicationResponse)
 async def create_medication(req: schemas.MedicationCreate, db: Session = Depends(get_db)):
@@ -26,8 +30,12 @@ async def create_medication(req: schemas.MedicationCreate, db: Session = Depends
 
     new_med = models.Medication(
         user_id=req.user_id,
+        member_id=req.member_id,
         name=req.name,
         dose=req.dose,
+        frequency=req.frequency,
+        form=req.form,
+        duration=req.duration,
         color=c["color"],
         color_bg=c["bg"]
     )
@@ -124,12 +132,18 @@ async def update_refill(medication_id: str, req: RefillUpdateRequest, db: Sessio
     return {"status": "success"}
 
 @router.get("/needs-refill")
-async def get_needs_refill(user_id: str, db: Session = Depends(get_db)):
+async def get_needs_refill(user_id: str, member_id: Optional[str] = None, db: Session = Depends(get_db)):
     """Returns medications where remaining_quantity <= refill_threshold"""
-    meds = db.query(models.Medication).filter(
+    query = db.query(models.Medication).filter(
         models.Medication.user_id == user_id,
         models.Medication.is_refill_reminder_on == True,
-    ).all()
+    )
+    if member_id:
+        query = query.filter(models.Medication.member_id == member_id)
+    else:
+        query = query.filter(models.Medication.member_id == None)
+    
+    meds = query.all()
     needs_refill = [m for m in meds if (m.remaining_quantity or 30) <= (m.refill_threshold or 5)]
     return {"count": len(needs_refill), "medications": [{"id": m.id, "name": m.name, "remaining": m.remaining_quantity} for m in needs_refill]}
 

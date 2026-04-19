@@ -172,7 +172,9 @@ const stats = StyleSheet.create({
 // ─── Main Screen ────────────────────────────────────────────────────────────────
 const FILTERS = ['All', 'Scans', 'Manual'];
 
-export default function PrescriptionTimelineScreen({ user, navigate, goBack }) {
+export default function PrescriptionTimelineScreen({ user, navigate, goBack, memberId: propMemberId, memberName: propMemberName }) {
+    const [activeMemberId, setActiveMemberId] = useState(propMemberId || null);
+    const [activeMemberName, setActiveMemberName] = useState(propMemberName || null);
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('All');
@@ -186,7 +188,9 @@ export default function PrescriptionTimelineScreen({ user, navigate, goBack }) {
     const fetchHistory = async () => {
         if (!user?.id) { setLoading(false); return; }
         try {
-            const res = await fetch(`${API_URL}api/prescriptions/history?user_id=${user.id}`);
+            let url = `${API_URL}api/prescriptions/history?user_id=${user.id}`;
+            if (activeMemberId) url += `&member_id=${activeMemberId}`;
+            const res = await fetch(url);
             const data = await res.json();
             if (data.status === 'success') {
                 setHistory(data.history.map(item => {
@@ -260,8 +264,8 @@ export default function PrescriptionTimelineScreen({ user, navigate, goBack }) {
                         <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
                     <View style={{ flex: 1, paddingLeft: 14 }}>
-                        <Text style={styles.headerTitle}>Prescription Timeline</Text>
-                        <Text style={styles.headerSub}>Your complete medical history</Text>
+                        <Text style={styles.headerTitle}>{activeMemberName ? `${activeMemberName}'s Timeline` : 'Prescription Timeline'}</Text>
+                        <Text style={styles.headerSub}>{activeMemberName ? `History for ${activeMemberName}` : 'Your complete medical history'}</Text>
                     </View>
                     <TouchableOpacity style={styles.refreshBtn} onPress={fetchHistory}>
                         <Feather name="refresh-cw" size={16} color="rgba(255,255,255,0.8)" />
