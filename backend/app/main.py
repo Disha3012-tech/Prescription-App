@@ -10,9 +10,12 @@ import hashlib
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
-
+import httpx
 import re
-
+import requests
+import urllib.request
+import urllib.parse
+import asyncio
 from app.ocr import extract_text
 from app.clean import clean_text
 from app.matcher import detect_medicines
@@ -20,7 +23,7 @@ from app.llm_corrector import correct_medicines
 from app.structurer import structure_medicines
 from app.explain import explain_medicine
 from app.llm import call_llm_chat, call_llm, call_llm_vision
-
+import math
 # ─── Models ───────────────────────────────────────────────────────────────
 
 class ChatMessage(BaseModel):
@@ -374,35 +377,365 @@ Return ONLY a valid JSON array, no markdown:
             os.remove(file_path)
         raise e
 
-import urllib.request
-import urllib.parse
+import math
 
-@app.get("/api/pharmacies/nearby")
-def get_nearby_pharmacies(lat: float, lng: float):
-    query = {
-        "format": "json", "q": "pharmacy", "lat": lat, "lon": lng, 
-        "bounded": 1, "viewbox": f"{lng-0.05},{lat+0.05},{lng+0.05},{lat-0.05}", "limit": 10
-    }
-    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(query)
-    req = urllib.request.Request(url, headers={"User-Agent": "PrescriptionApp/1.0"})
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+def is_open_now(opening_hours_str: str):
+    if not opening_hours_str:
+        return None
+    s = opening_hours_str.lower().strip()
+    if s == "24/7":
+        return True
+    days = ["mo", "tu", "we", "th", "fr", "sa", "su"]
+    today = days[datetime.now().weekday()]
+    now_minutes = datetime.now().hour * 60 + datetime.now().minute
+    for part in s.split(";"):
+        part = part.strip()
+        match = re.search(r'(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})', part)
+        if match and today in part:
+            open_m = int(match.group(1)) * 60 + int(match.group(2))
+            close_m = int(match.group(3)) * 60 + int(match.group(4))
+            return open_m <= now_minutes <= close_m
+    return None
+
+# Keywords that indicate a result is NOT a pharmacy
+NON_PHARMACY_KEYWORDS = [
+    "hospital", "clinic", "doctor", "nursing", "school", "college",
+    "hotel", "restaurant", "cafe", "shop", "store", "market", "mall",
+    "salon", "beauty", "gym", "fitness", "bank", "atm", "temple",
+    "church", "mosque", "office", "agency", "courier", "petrol", "fuel",
+]
+
+def is_likely_pharmacy(name: str, tags: dict = None) -> bool:
+    """Filter out results that are clearly not pharmacies."""
+    if not name:
+        return False
+    name_lower = name.lower()
+    
+    # Reject if name contains non-pharmacy keywords
+    for kw in NON_PHARMACY_KEYWORDS:
+        if kw in name_lower:
+            return False
+    
+    # Accept if name contains pharmacy-related words
+    pharmacy_words = ["pharma", "pharmacy", "medical", "medicine", "drug", 
+                      "chemist", "health", "medic", "dispensary", "apollo",
+                      "med ", "meds", "rx", "care", "wellness"]
+    for kw in pharmacy_words:
+        if kw in name_lower:
+            return True
+    
+    # For Overpass results, trust the amenity=pharmacy tag completely
+    if tags and tags.get("amenity") == "pharmacy":
+        return True
+    
+    # For Nominatim, if name doesn't match any known word, be skeptical
+    # but still include it (Overpass already filtered by amenity tag)
+    return True
+
+
+def parse_overpass_results(elements: list, user_lat: float, user_lng: float) -> list:
+    results = []
+    seen = set()
+    for el in elements:
+        tags = el.get("tags", {})
+        name = tags.get("name")
+        if not name or name.lower() in seen:
+            continue
+
+        if not is_likely_pharmacy(name, tags):
+            continue
+
+        seen.add(name.lower())
+
+        # Center coordinates for ways, or direct lat/lon for nodes
+        plat = el.get("lat") or el.get("center", {}).get("lat")
+        plng = el.get("lon") or el.get("center", {}).get("lon")
+
+        if plat is None or plng is None:
+            continue
+
+        dist = haversine_km(user_lat, user_lng, float(plat), float(plng))
+
+        # Address construction
+        addr_parts = [
+            tags.get("addr:housenumber"),
+            tags.get("addr:street"),
+            tags.get("addr:suburb") or tags.get("addr:city")
+        ]
+        address = ", ".join([p for p in addr_parts if p])
+
+        results.append({
+            "id": str(el.get("id", "")),
+            "title": name,
+            "latitude": float(plat),
+            "longitude": float(plng),
+            "rating": None,
+            "address": address or "Address not specified",
+            "open_now": is_open_now(tags.get("opening_hours")),
+            "place_id": None,
+            "distanceKm": round(dist, 3),
+        })
+
+    results.sort(key=lambda x: x["distanceKm"])
+    return results
+
+
+def parse_nominatim_results(items: list, user_lat: float, user_lng: float) -> list:
+    results = []
+    seen = set()
+    for item in items:
+        # Nominatim returns name in 'display_name' or 'namedetails'
+        name = item.get("namedetails", {}).get("name") or item.get("name") or (item.get("display_name", "").split(",")[0] if item.get("display_name") else "Unknown")
+        if not name or name.lower() in seen:
+            continue
+
+        if not is_likely_pharmacy(name):
+            continue
+
+        seen.add(name.lower())
+
+        try:
+            plat = float(item["lat"])
+            plng = float(item["lon"])
+        except (KeyError, ValueError, TypeError):
+            continue
+
+        dist = haversine_km(user_lat, user_lng, plat, plng)
+
+        # Nominatim display_name is usually a full address
+        full_address = item.get("display_name", "")
+
+        results.append({
+            "id": str(item.get("osm_id", "")),
+            "title": name,
+            "latitude": plat,
+            "longitude": plng,
+            "rating": None,
+            "address": full_address,
+            "open_now": None,  # Nominatim doesn't provide opening hours usually
+            "place_id": str(item.get("place_id", "")),
+            "distanceKm": round(dist, 3),
+        })
+    results.sort(key=lambda x: x["distanceKm"])
+    return results
+
+import asyncio
+import time
+
+# ── Simple in-memory cache (geohash ~500m grid) ──────────────────────────────
+_pharmacy_cache: dict = {}
+CACHE_TTL_SECONDS = 60 * 60  # 1 hour
+
+def _cache_key(lat: float, lng: float) -> str:
+    """Round to ~500m grid for cache bucketing."""
+    return f"{round(lat, 2)},{round(lng, 2)}"
+
+def _cache_get(lat, lng):
+    key = _cache_key(lat, lng)
+    entry = _pharmacy_cache.get(key)
+    if entry and (time.time() - entry["ts"]) < CACHE_TTL_SECONDS:
+        print(f"[CACHE] HIT for {key}")
+        return entry["data"]
+    return None
+
+def _cache_set(lat, lng, data):
+    key = _cache_key(lat, lng)
+    _pharmacy_cache[key] = {"ts": time.time(), "data": data}
+
+# ── Overpass: parallel fetch with per-mirror timeout ─────────────────────────
+async def fetch_overpass(lat: float, lng: float, radius: int = 3000):
+    overpass_query = f"""
+[out:json][timeout:20];
+(
+  node["amenity"="pharmacy"](around:{radius},{lat},{lng});
+  way["amenity"="pharmacy"](around:{radius},{lat},{lng});
+);
+out center tags;
+"""
+    mirrors = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        "https://overpass.openstreetmap.ru/api/interpreter",
+    ]
+
+    async def try_mirror(mirror: str):
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=6, read=22, write=6, pool=6)) as client:
+                resp = await client.post(
+                    mirror,
+                    data={"data": overpass_query},
+                    headers={"User-Agent": "PrescriptionApp/1.0"},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("elements"):
+                        print(f"[OVERPASS] ✓ {mirror} → {len(data['elements'])} elements")
+                        return data
+                print(f"[OVERPASS] {mirror} → HTTP {resp.status_code}, empty or no elements")
+        except Exception as e:
+            print(f"[OVERPASS] {mirror} failed: {type(e).__name__}: {e}")
+        return None
+
+    # Race all mirrors — return first non-None result
+    tasks = [asyncio.create_task(try_mirror(m)) for m in mirrors]
     try:
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode())
-        results = []
-        for i, item in enumerate(data):
-            title = item.get("name")
-            if not title: title = "Local Pharmacy"
-            results.append({
-                "id": str(item.get("place_id", i)),
-                "title": title,
-                "latitude": float(item.get("lat")),
-                "longitude": float(item.get("lon"))
-            })
-        # If API returns nothing in area, return empty instead of dummy so it reflects 
-        # real location accurately.
-        return {"status": "success", "pharmacies": results}
+        for done in asyncio.as_completed(tasks):
+            result = await done
+            if result:
+                # Cancel remaining tasks
+                for t in tasks:
+                    t.cancel()
+                return result
+    except asyncio.CancelledError:
+        pass
+    return None
+
+
+# ── Nominatim: primary fallback ───────────────────────────────────────────────
+async def fetch_nominatim(lat: float, lng: float):
+    delta = 0.018  # ~2 km
+    url = (
+        f"https://nominatim.openstreetmap.org/search"
+        f"?amenity=pharmacy"
+        f"&viewbox={lng-delta},{lat+delta},{lng+delta},{lat-delta}"
+        f"&bounded=1&format=json&limit=30&addressdetails=1&namedetails=1"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=12) as client:
+            resp = await client.get(url, headers={"User-Agent": "PrescriptionApp/1.0"})
+            if resp.status_code == 200:
+                items = resp.json()
+                items = [
+                    i for i in items
+                    if i.get("category") == "amenity" and i.get("type") == "pharmacy"
+                ]
+                items.sort(key=lambda x: haversine_km(lat, lng, float(x["lat"]), float(x["lon"])))
+                print(f"[NOMINATIM] ✓ {len(items)} pharmacies")
+                return items
+            print(f"[NOMINATIM] HTTP {resp.status_code}")
     except Exception as e:
-        return {"status": "error", "pharmacies": []}
+        print(f"[NOMINATIM] Failed: {type(e).__name__}: {e}")
+    return []
+
+
+# ── Photon: secondary fallback (runs on OSM data, very reliable) ──────────────
+async def fetch_photon(lat: float, lng: float):
+    """
+    Photon by Komoot — OSM-based geocoder, very reliable, no rate limits for small usage.
+    https://photon.komoot.io
+    """
+    url = (
+        f"https://photon.komoot.io/api/"
+        f"?q=pharmacy&lat={lat}&lon={lng}&limit=20&lang=en"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=12) as client:
+            resp = await client.get(url, headers={"User-Agent": "PrescriptionApp/1.0"})
+            if resp.status_code == 200:
+                features = resp.json().get("features", [])
+                # Filter: only amenity=pharmacy
+                features = [
+                    f for f in features
+                    if f.get("properties", {}).get("osm_value") == "pharmacy"
+                ]
+                # Sort by distance
+                features.sort(key=lambda f: haversine_km(
+                    lat, lng,
+                    f["geometry"]["coordinates"][1],
+                    f["geometry"]["coordinates"][0],
+                ))
+                print(f"[PHOTON] ✓ {len(features)} pharmacies")
+                return features
+            print(f"[PHOTON] HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"[PHOTON] Failed: {type(e).__name__}: {e}")
+    return []
+
+
+def parse_photon_results(features: list, user_lat: float, user_lng: float) -> list:
+    results = []
+    seen = set()
+    for f in features:
+        props = f.get("properties", {})
+        name = props.get("name")
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+
+        coords = f.get("geometry", {}).get("coordinates", [])
+        if len(coords) < 2:
+            continue
+        plng, plat = float(coords[0]), float(coords[1])
+        if not (-90 <= plat <= 90 and -180 <= plng <= 180):
+            continue
+
+        addr_parts = list(filter(None, [
+            props.get("housenumber"),
+            props.get("street"),
+            props.get("suburb") or props.get("district") or props.get("city"),
+        ]))
+        dist = haversine_km(user_lat, user_lng, plat, plng)
+
+        results.append({
+            "id": str(props.get("osm_id", "")),
+            "title": name,
+            "latitude": plat,
+            "longitude": plng,
+            "rating": None,
+            "address": ", ".join(addr_parts),
+            "open_now": None,
+            "place_id": None,
+            "distanceKm": round(dist, 3),
+        })
+
+    results.sort(key=lambda x: x["distanceKm"])
+    return results
+
+
+# ── Main endpoint ─────────────────────────────────────────────────────────────
+@app.get("/api/pharmacies/nearby")
+async def get_nearby_pharmacies(lat: float, lng: float, limit: int = 20):
+    # 1. Check cache first
+    cached = _cache_get(lat, lng)
+    if cached:
+        return {"status": "success", "pharmacies": cached[:limit], "source": "cache"}
+
+    # 2. Try Overpass (all mirrors in parallel)
+    overpass_data = await fetch_overpass(lat, lng, radius=3000)
+    if overpass_data and overpass_data.get("elements"):
+        results = parse_overpass_results(overpass_data["elements"], lat, lng)
+        if results:
+            _cache_set(lat, lng, results)
+            return {"status": "success", "pharmacies": results[:limit], "source": "overpass"}
+
+    # 3. Nominatim fallback
+    print("[FALLBACK] Trying Nominatim...")
+    nominatim_items = await fetch_nominatim(lat, lng)
+    if nominatim_items:
+        results = parse_nominatim_results(nominatim_items, lat, lng)
+        if results:
+            _cache_set(lat, lng, results)
+            return {"status": "success", "pharmacies": results[:limit], "source": "nominatim"}
+
+    # 4. Photon fallback (most reliable, OSM-backed)
+    print("[FALLBACK] Trying Photon...")
+    photon_features = await fetch_photon(lat, lng)
+    if photon_features:
+        results = parse_photon_results(photon_features, lat, lng)
+        if results:
+            _cache_set(lat, lng, results)
+            return {"status": "success", "pharmacies": results[:limit], "source": "photon"}
+
+    return {"status": "error", "pharmacies": [], "message": "All pharmacy data sources failed."}
+
 class ConfirmRequest(BaseModel):
     confirmed_medicines: List[dict]   # [{name, dosage, frequency, duration, form}]
     country: Optional[str] = "India"
