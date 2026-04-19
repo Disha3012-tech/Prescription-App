@@ -46,7 +46,7 @@ const formatText = (text, isUser) => {
     });
 };
 
-export default function AskAIScreen() {
+export default function AskAIScreen({ goBack }) {
     const [messages, setMessages] = useState([
         { id: '0', role: 'assistant', content: WELCOME_MESSAGE },
     ]);
@@ -160,6 +160,9 @@ export default function AskAIScreen() {
 
             {/* Header */}
             <LinearGradient colors={['#0A1628', '#0F2535']} style={styles.header}>
+                <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
+                    <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
+                </TouchableOpacity>
                 <View style={styles.headerLeft}>
                     <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.headerAvatar}>
                         <MaterialCommunityIcons name="robot-outline" size={20} color="#fff" />
@@ -275,8 +278,13 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F7FFFD' },
 
     header: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        flexDirection: 'row', alignItems: 'center', gap: 12,
         paddingHorizontal: 20, paddingVertical: 14,
+    },
+    backBtn: {
+        width: 38, height: 38, borderRadius: 19,
+        backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
     },
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     headerAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },

@@ -134,7 +134,7 @@ export default function DashboardScreen({ user, navigate }) {
         return 'Good evening';
     };
 
-    const healthScore = meds.length === 0 ? 72 : Math.min(100, Math.round(40 + adherencePct * 0.6));
+    const healthScore = meds.length === 0 ? 100 : Math.round(adherencePct);
     const firstName = user?.name?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'there';
 
     return (

@@ -76,6 +76,9 @@ class Medication(Base):
     dose = Column(String)
     color = Column(String)
     color_bg = Column(String)
+    frequency = Column(String, nullable=True)
+    form = Column(String, nullable=True)
+    duration = Column(String, nullable=True)
     
     # Refill Tracking
     total_quantity = Column(Float, default=30.0) 

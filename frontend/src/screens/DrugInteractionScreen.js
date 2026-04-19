@@ -44,7 +44,7 @@ const SEVERITY_CONFIG = {
     },
 };
 
-export default function DrugInteractionScreen() {
+export default function DrugInteractionScreen({ goBack }) {
     const [drug1, setDrug1] = useState('');
     const [drug2, setDrug2] = useState('');
     const [focusedField, setFocusedField] = useState(null);
@@ -81,6 +81,9 @@ export default function DrugInteractionScreen() {
 
             {/* Header */}
             <LinearGradient colors={['#0A1628', '#0F2535']} style={styles.header}>
+                <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
+                    <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
+                </TouchableOpacity>
                 <LinearGradient colors={['#7C3AED', '#6D28D9']} style={styles.headerIcon}>
                     <MaterialCommunityIcons name="shield-search" size={36} color={COLORS.textMuted} />
                 </LinearGradient>
@@ -322,6 +325,11 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row', alignItems: 'center', gap: 14,
         paddingHorizontal: 20, paddingVertical: 18,
+    },
+    backBtn: {
+        width: 38, height: 38, borderRadius: 19,
+        backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
     },
     headerIcon: { width: 46, height: 46, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
     headerTitle: { fontSize: 17, fontWeight: '800', color: '#fff' },

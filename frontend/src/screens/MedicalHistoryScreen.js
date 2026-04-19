@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView,
-  TextInput, ActivityIndicator, Modal, Pressable, StatusBar, Animated, Platform
+  TextInput, ActivityIndicator, Modal, Pressable, StatusBar, Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SHADOWS } from '../theme';
@@ -14,7 +14,49 @@ const STAT_COLORS = [
   { colors: ['#F59E0B', '#D97706'], icon: 'calendar-month-outline' },
 ];
 
-export default function MedicalHistoryScreen({ user, navigate }) {
+// ─── Member Banner ─────────────────────────────────────────────────────────────
+const MemberBanner = ({ memberName, onClear }) => (
+  <View style={banner.wrap}>
+    <LinearGradient colors={['#0D9488', '#0891B2']} style={banner.avatar}>
+      <Text style={banner.avatarText}>{memberName[0].toUpperCase()}</Text>
+    </LinearGradient>
+    <View style={{ flex: 1 }}>
+      <Text style={banner.label}>Viewing records for</Text>
+      <Text style={banner.name}>{memberName}</Text>
+    </View>
+    <TouchableOpacity style={banner.clearBtn} onPress={onClear}>
+      <Feather name="x" size={13} color={COLORS.textSecondary} />
+      <Text style={banner.clearText}>Show mine</Text>
+    </TouchableOpacity>
+  </View>
+);
+const banner = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+    backgroundColor: '#fff', borderRadius: 16, padding: 12,
+    borderWidth: 1.5, borderColor: COLORS.primary + '40', ...SHADOWS.sm,
+  },
+  avatar: {
+    width: 38, height: 38, borderRadius: 19,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarText: { fontSize: 16, fontWeight: '900', color: '#fff' },
+  label: { fontSize: 11, color: COLORS.textMuted, fontWeight: '600' },
+  name: { fontSize: 15, fontWeight: '800', color: COLORS.textPrimary },
+  clearBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: COLORS.lightGray, paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 10, borderWidth: 1, borderColor: COLORS.border,
+  },
+  clearText: { fontSize: 11, fontWeight: '700', color: COLORS.textSecondary },
+});
+
+export default function MedicalHistoryScreen({ user, navigate, goBack, memberId: propMemberId, memberName: propMemberName }) {
+  // memberId can come from props (family nav) or be cleared to show own records
+  const [activeMemberId, setActiveMemberId] = useState(propMemberId || null);
+  const [activeMemberName, setActiveMemberName] = useState(propMemberName || null);
+
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -26,16 +68,29 @@ export default function MedicalHistoryScreen({ user, navigate }) {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // Re-fetch whenever the active member changes
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: false }).start();
     if (user?.id) fetchHistory();
-  }, [user]);
+  }, [user, activeMemberId]);
+
+  // Sync prop changes (e.g. navigating from a different family member)
+  useEffect(() => {
+    setActiveMemberId(propMemberId || null);
+    setActiveMemberName(propMemberName || null);
+  }, [propMemberId, propMemberName]);
 
   const fetchHistory = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}api/prescriptions/history?user_id=${user.id}`);
+
+      // Build URL — include member_id if we're viewing a family member
+      let url = `${API_URL}api/prescriptions/history?user_id=${user.id}`;
+      if (activeMemberId) url += `&member_id=${activeMemberId}`;
+
+      const response = await fetch(url);
       const data = await response.json();
+
       if (data.status === 'success') {
         const formatted = data.history.map(item => ({
           id: item.id,
@@ -45,60 +100,59 @@ export default function MedicalHistoryScreen({ user, navigate }) {
           medicines: item.results.map(r => r.medicine),
           fullResults: item.results,
           notes: item.results?.[0]?.explanation?.what_it_does || item.raw_text?.substring(0, 100),
-          image_url: item.image_url ? (item.image_url.startsWith('http') ? item.image_url : `${API_URL.replace(/\/$/, '')}${item.image_url}`) : null,
+          image_url: item.image_url
+            ? (item.image_url.startsWith('http') ? item.image_url : `${API_URL.replace(/\/$/, '')}${item.image_url}`)
+            : null,
           raw_image_url: item.image_url,
           raw_text: item.raw_text,
           avg_confidence: item.avg_confidence,
           country: item.country,
           currency: item.currency,
+          member_id: item.member_id,
         }));
         setRecords(formatted);
       }
-    } catch (err) { console.error('Error fetching history:', err); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error('Error fetching history:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAdd = async () => {
     if (!newCondition) return;
     try {
+      const body = {
+        user_id: user.id,
+        condition: newCondition,
+        doctor: newDoctor || 'Unknown Doctor',
+        notes: newNotes,
+      };
+      if (activeMemberId) body.member_id = activeMemberId;
+
       const response = await fetch(`${API_URL}api/prescriptions/manual`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: user.id,
-          condition: newCondition,
-          doctor: newDoctor || 'Unknown Doctor',
-          notes: newNotes,
-        }),
+        body: JSON.stringify(body),
       });
       if (response.ok) {
         setAdding(false);
-        setNewCondition('');
-        setNewDoctor('');
-        setNewNotes('');
+        setNewCondition(''); setNewDoctor(''); setNewNotes('');
         fetchHistory();
       }
-    } catch (err) { console.error('Error adding record:', err); }
-  };
-
-  const handleDeleteRecord = (id) => {
-    setDeleteConfirm(id);
+    } catch (err) {
+      console.error('Error adding record:', err);
+    }
   };
 
   const deleteRecord = async (id) => {
     try {
-      const response = await fetch(`${API_URL}api/prescriptions/${id}`, {
-        method: 'DELETE'
-      });
-
+      const response = await fetch(`${API_URL}api/prescriptions/${id}`, { method: 'DELETE' });
       if (response.ok) {
-        setExpanded(null);
-        setDeleteConfirm(null);
+        setExpanded(null); setDeleteConfirm(null);
         fetchHistory();
       }
-    } catch (err) {
-      console.log(err);
-    }
+    } catch (err) { console.log(err); }
   };
 
   const filtered = records.filter(r =>
@@ -108,13 +162,23 @@ export default function MedicalHistoryScreen({ user, navigate }) {
 
   const stats = [
     { label: 'Total Scans', value: records.length.toString() },
-    { label: 'Conditions', value: [...new Set(records.map(r => r.condition))].length.toString() },
-    { label: 'This Month', value: records.filter(r => new Date(r.date).getMonth() === new Date().getMonth()).length.toString() },
+    { label: 'Medicines', value: records.reduce((acc, curr) => acc + (curr.medicines?.length || 0), 0).toString() },
+    {
+      label: 'This Month',
+      value: records.filter(r => new Date(r.date).getMonth() === new Date().getMonth()).length.toString(),
+    },
   ];
 
-  const formatDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const formatDate = (d) =>
+    new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const activeRecord = records.find(r => r.id === expanded);
+
+  // Dynamic header title
+  const screenTitle = activeMemberName ? `${activeMemberName}'s History` : 'Medical History';
+  const screenSub = activeMemberName
+    ? `Prescription records for ${activeMemberName}`
+    : 'Your complete health record';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -123,27 +187,19 @@ export default function MedicalHistoryScreen({ user, navigate }) {
       {/* Delete Confirmation Modal */}
       <Modal visible={!!deleteConfirm} transparent animationType="fade" onRequestClose={() => setDeleteConfirm(null)}>
         <Pressable style={styles.confirmBackdrop} onPress={() => setDeleteConfirm(null)}>
-          <Pressable style={styles.confirmDialog} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={styles.confirmDialog} onPress={e => e.stopPropagation()}>
             <View style={styles.confirmIcon}>
               <Feather name="alert-triangle" size={28} color={COLORS.dangerText} />
             </View>
             <Text style={styles.confirmTitle}>Delete Record?</Text>
             <Text style={styles.confirmMessage}>
-              This prescription will be permanently removed from your history. This action cannot be undone.
+              This prescription will be permanently removed. This action cannot be undone.
             </Text>
             <View style={styles.confirmButtons}>
-              <TouchableOpacity
-                style={styles.confirmBtnCancel}
-                onPress={() => setDeleteConfirm(null)}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.confirmBtnCancel} onPress={() => setDeleteConfirm(null)}>
                 <Text style={styles.confirmBtnCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmBtnDelete}
-                onPress={() => deleteRecord(deleteConfirm)}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.confirmBtnDelete} onPress={() => deleteRecord(deleteConfirm)}>
                 <LinearGradient colors={['#DC2626', '#B91C1C']} style={styles.confirmBtnDeleteGradient}>
                   <Text style={styles.confirmBtnDeleteText}>Delete</Text>
                 </LinearGradient>
@@ -156,10 +212,7 @@ export default function MedicalHistoryScreen({ user, navigate }) {
       {/* Bottom Sheet Modal */}
       <Modal visible={!!expanded} transparent animationType="slide" onRequestClose={() => setExpanded(null)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setExpanded(null)}>
-          <Pressable
-            style={styles.sheet}
-            onPress={(e) => e.stopPropagation()}
-          >
+          <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetTitleRow}>
               <Text style={styles.sheetTitle} numberOfLines={1}>{activeRecord?.condition}</Text>
@@ -189,31 +242,28 @@ export default function MedicalHistoryScreen({ user, navigate }) {
               onPress={() => {
                 if (!activeRecord) return;
                 setExpanded(null);
-
                 const highlights = (activeRecord.fullResults || []).map(r => ({
                   medicine: r.medicine || r.name,
                   bbox: r.bbox,
                   confidence: r.confidence || 0.8,
                   uncertain: r.uncertain || false,
                 }));
-
-                const rawRes = {
-                  results: activeRecord.fullResults,
-                  raw_text: activeRecord.raw_text,
-                  avg_confidence: activeRecord.avg_confidence,
-                  image_url: activeRecord.raw_image_url,
-                };
-
                 navigate('CONFIRM_MEDICINES', {
                   imageUri: activeRecord.image_url,
                   image_url: activeRecord.raw_image_url,
                   medicineHighlights: highlights,
-                  rawResult: rawRes,
+                  rawResult: {
+                    results: activeRecord.fullResults,
+                    raw_text: activeRecord.raw_text,
+                    avg_confidence: activeRecord.avg_confidence,
+                    image_url: activeRecord.raw_image_url,
+                  },
                   country: activeRecord.country || 'India',
                   currency: activeRecord.currency || 'INR',
                   userId: user.id,
+                  memberId: activeMemberId,
                   prescriptionId: activeRecord.id,
-                  isEditing: true
+                  isEditing: true,
                 });
               }}
             >
@@ -231,10 +281,7 @@ export default function MedicalHistoryScreen({ user, navigate }) {
 
             <TouchableOpacity
               style={styles.sheetOption}
-              onPress={() => {
-                setExpanded(null);
-                setTimeout(() => handleDeleteRecord(expanded), 300);
-              }}
+              onPress={() => { setExpanded(null); setTimeout(() => setDeleteConfirm(expanded), 300); }}
             >
               <View style={[styles.sheetOptionIcon, { backgroundColor: COLORS.dangerBg }]}>
                 <Feather name="trash-2" size={16} color={COLORS.dangerText} />
@@ -259,9 +306,12 @@ export default function MedicalHistoryScreen({ user, navigate }) {
         <LinearGradient colors={['#0A1628', '#0F2535']} style={styles.header}>
           <View style={styles.bgCircle} />
           <View style={styles.headerTop}>
-            <View>
-              <Text style={styles.headerTitle}>Medical History</Text>
-              <Text style={styles.headerSub}>Your complete health record</Text>
+            <TouchableOpacity style={styles.backBtn} onPress={() => goBack()}>
+              <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
+            </TouchableOpacity>
+            <View style={{ flex: 1, paddingLeft: 14 }}>
+              <Text style={styles.headerTitle}>{screenTitle}</Text>
+              <Text style={styles.headerSub}>{screenSub}</Text>
             </View>
             <TouchableOpacity
               style={[styles.addBtn, adding && { backgroundColor: 'rgba(220,38,38,0.3)' }]}
@@ -271,19 +321,38 @@ export default function MedicalHistoryScreen({ user, navigate }) {
             </TouchableOpacity>
           </View>
 
-          {/* User card */}
+          {/* User/member card */}
           <View style={styles.userCard}>
-            <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.userAvatar}>
-              <Text style={styles.userAvatarText}>{(user?.name || user?.full_name || 'U')[0].toUpperCase()}</Text>
+            <LinearGradient
+              colors={activeMemberId ? ['#7C3AED', '#6D28D9'] : ['#0D9488', '#0891B2']}
+              style={styles.userAvatar}
+            >
+              <Text style={styles.userAvatarText}>
+                {(activeMemberName || user?.name || user?.full_name || 'U')[0].toUpperCase()}
+              </Text>
             </LinearGradient>
             <View style={{ flex: 1 }}>
-              <Text style={styles.userName}>{user?.name || user?.full_name || 'Patient'}</Text>
-              <Text style={styles.userEmail}>{user?.email || ''}</Text>
+              <Text style={styles.userName}>
+                {activeMemberName || user?.name || user?.full_name || 'Patient'}
+              </Text>
+              <Text style={styles.userEmail}>
+                {activeMemberId ? 'Family member' : (user?.email || '')}
+              </Text>
             </View>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="shield-checkmark" size={13} color="#34D399" />
-              <Text style={styles.verifiedText}>Verified</Text>
-            </View>
+            {activeMemberId ? (
+              <TouchableOpacity
+                style={styles.switchBtn}
+                onPress={() => { setActiveMemberId(null); setActiveMemberName(null); }}
+              >
+                <Feather name="user" size={12} color={COLORS.primary} />
+                <Text style={styles.switchBtnText}>My Records</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="shield-checkmark" size={13} color="#34D399" />
+                <Text style={styles.verifiedText}>Verified</Text>
+              </View>
+            )}
           </View>
 
           {/* Stats */}
@@ -305,7 +374,9 @@ export default function MedicalHistoryScreen({ user, navigate }) {
         {/* Add Form */}
         {adding && (
           <Animated.View style={[styles.addForm, { opacity: fadeAnim }]}>
-            <Text style={styles.addFormTitle}>New Health Record</Text>
+            <Text style={styles.addFormTitle}>
+              New Record{activeMemberName ? ` for ${activeMemberName}` : ''}
+            </Text>
             {[
               { label: 'Condition / Diagnosis', value: newCondition, set: setNewCondition, placeholder: 'e.g. Seasonal Allergies' },
               { label: 'Doctor Name', value: newDoctor, set: setNewDoctor, placeholder: 'e.g. Dr. Sharma' },
@@ -337,7 +408,7 @@ export default function MedicalHistoryScreen({ user, navigate }) {
           <Feather name="search" size={16} color={COLORS.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search records..."
+            placeholder={`Search ${activeMemberName ? `${activeMemberName}'s` : 'your'} records...`}
             placeholderTextColor={COLORS.textMuted}
             value={search}
             onChangeText={setSearch}
@@ -362,36 +433,53 @@ export default function MedicalHistoryScreen({ user, navigate }) {
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="clipboard-text-outline" size={44} color={COLORS.border} />
             <Text style={styles.emptyTitle}>No records found</Text>
-            <Text style={styles.emptyText}>Scan a prescription to get started</Text>
+            <Text style={styles.emptyText}>
+              {activeMemberName
+                ? `Scan a prescription for ${activeMemberName} to get started`
+                : 'Scan a prescription to get started'}
+            </Text>
+            <TouchableOpacity
+              style={styles.scanBtn}
+              onPress={() => navigate('SCANNER', activeMemberId ? { memberId: activeMemberId } : undefined)}
+            >
+              <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.scanBtnGrad}>
+                <Feather name="camera" size={15} color="#fff" />
+                <Text style={styles.scanBtnText}>Scan Prescription</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         )}
 
         {/* Records */}
-        {filtered.map((record, i) => (
+        {filtered.map((record) => (
           <Animated.View key={record.id} style={{ opacity: fadeAnim }}>
             <TouchableOpacity
               style={styles.recordCard}
               onPress={() => navigate('PRESCRIPTION_DETAIL', { record, refreshHistory: fetchHistory })}
               activeOpacity={0.8}
             >
-              <View style={styles.recordLeft}>
-                <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.recordIcon}>
-                  <MaterialCommunityIcons name="clipboard-pulse" size={16} color="#fff" />
-                </LinearGradient>
-              </View>
+              <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.recordIcon}>
+                <MaterialCommunityIcons name="clipboard-pulse" size={16} color="#fff" />
+              </LinearGradient>
               <View style={{ flex: 1 }}>
                 <Text style={styles.recordCondition}>{record.condition}</Text>
+                <Text style={[styles.recordMeta, { color: COLORS.primary, fontWeight: '700' }]}>
+                  {record.medicines?.length || 0} Medicines
+                </Text>
                 <Text style={styles.recordMeta}>{formatDate(record.date)}</Text>
                 {record.medicines?.length > 0 && (
                   <View style={styles.recordMedBadge}>
                     <MaterialCommunityIcons name="pill" size={10} color={COLORS.primary} />
-                    <Text style={styles.recordMedText}>{record.medicines.slice(0, 2).join(', ')}{record.medicines.length > 2 ? ` +${record.medicines.length - 2}` : ''}</Text>
+                    <Text style={styles.recordMedText}>
+                      {record.medicines.slice(0, 2).join(', ')}
+                      {record.medicines.length > 2 ? ` +${record.medicines.length - 2}` : ''}
+                    </Text>
                   </View>
                 )}
               </View>
               <TouchableOpacity
                 style={styles.menuBtn}
-                onPress={(e) => { e.stopPropagation(); setExpanded(record.id); }}
+                onPress={e => { e.stopPropagation(); setExpanded(record.id); }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <MaterialCommunityIcons name="dots-vertical" size={22} color={COLORS.textSecondary} />
@@ -399,7 +487,6 @@ export default function MedicalHistoryScreen({ user, navigate }) {
             </TouchableOpacity>
           </Animated.View>
         ))}
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -408,210 +495,84 @@ export default function MedicalHistoryScreen({ user, navigate }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
 
-  // Delete Confirmation Modal
-  confirmBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  confirmDialog: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    width: '100%',
-    maxWidth: 360,
-    alignItems: 'center',
-    ...SHADOWS.xl,
-  },
-  confirmIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: COLORS.dangerBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  confirmTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  confirmMessage: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  confirmButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  confirmBtnCancel: {
-    flex: 1,
-    paddingVertical: 14,
-    backgroundColor: COLORS.lightGray,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  confirmBtnCancelText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-  },
-  confirmBtnDelete: {
-    flex: 1,
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  confirmBtnDeleteGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  confirmBtnDeleteText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#fff',
-  },
+  confirmBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
+  confirmDialog: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 360, alignItems: 'center', ...SHADOWS.xl },
+  confirmIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.dangerBg, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  confirmTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, textAlign: 'center' },
+  confirmMessage: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  confirmButtons: { flexDirection: 'row', gap: 12, width: '100%' },
+  confirmBtnCancel: { flex: 1, paddingVertical: 14, backgroundColor: COLORS.lightGray, borderRadius: 14, alignItems: 'center' },
+  confirmBtnCancelText: { fontSize: 15, fontWeight: '700', color: COLORS.textSecondary },
+  confirmBtnDelete: { flex: 1, borderRadius: 14, overflow: 'hidden' },
+  confirmBtnDeleteGradient: { paddingVertical: 14, alignItems: 'center' },
+  confirmBtnDeleteText: { fontSize: 15, fontWeight: '700', color: '#fff' },
 
-  // Modal
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: '#fff', borderTopLeftRadius: 26, borderTopRightRadius: 26,
-    paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12,
-    ...SHADOWS.lg,
-  },
+  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12, ...SHADOWS.lg },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 18 },
   sheetTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   sheetTitle: { fontSize: 17, fontWeight: '800', color: COLORS.textPrimary, flex: 1 },
-  sheetMeta: {
-    fontSize: 12, fontWeight: '600', color: COLORS.primary,
-    backgroundColor: COLORS.successBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
-  },
+  sheetMeta: { fontSize: 12, fontWeight: '600', color: COLORS.primary, backgroundColor: COLORS.successBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   sheetOption: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
-  sheetOptionIcon: {
-    width: 42, height: 42, borderRadius: 13, justifyContent: 'center', alignItems: 'center',
-  },
+  sheetOptionIcon: { width: 42, height: 42, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
   sheetOptionLabel: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
   sheetOptionSub: { fontSize: 12, color: COLORS.textSecondary, marginTop: 1 },
   sheetDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 4 },
-  sheetCancel: {
-    marginTop: 12, paddingVertical: 14, backgroundColor: COLORS.lightGray,
-    borderRadius: 14, alignItems: 'center',
-  },
+  sheetCancel: { marginTop: 12, paddingVertical: 14, backgroundColor: COLORS.lightGray, borderRadius: 14, alignItems: 'center' },
   sheetCancelText: { fontSize: 15, fontWeight: '700', color: COLORS.textSecondary },
 
-  // Header
   header: { paddingBottom: 24, position: 'relative', overflow: 'hidden' },
-  bgCircle: {
-    position: 'absolute', width: 240, height: 240, borderRadius: 120,
-    backgroundColor: 'rgba(13,148,136,0.08)', top: -80, right: -60,
-  },
-  headerTop: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16,
-  },
-  headerTitle: { fontSize: 24, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+  bgCircle: { position: 'absolute', width: 240, height: 240, borderRadius: 120, backgroundColor: 'rgba(13,148,136,0.08)', top: -80, right: -60 },
+  headerTop: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
-  addBtn: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
-  },
+  addBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
 
-  userCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    marginHorizontal: 20, marginBottom: 14,
-    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-  },
+  userCard: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 20, marginBottom: 14, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   userAvatar: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
   userAvatarText: { fontSize: 18, fontWeight: '900', color: '#fff' },
   userName: { fontSize: 15, fontWeight: '800', color: '#fff' },
   userEmail: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
-  verifiedBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(52,211,153,0.15)', paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 10, borderWidth: 1, borderColor: 'rgba(52,211,153,0.25)',
-  },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(52,211,153,0.15)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(52,211,153,0.25)' },
   verifiedText: { fontSize: 11, fontWeight: '700', color: '#34D399' },
+  switchBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  switchBtnText: { fontSize: 11, fontWeight: '700', color: '#5EEAD4' },
 
   statsRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 10 },
-  statCard: {
-    flex: 1, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 14,
-    padding: 14, alignItems: 'center', gap: 6,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-  },
+  statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 14, padding: 14, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   statIcon: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   statValue: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   statLabel: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.45)', textAlign: 'center' },
 
-  // Add form
-  addForm: {
-    marginHorizontal: 16, marginTop: 16, backgroundColor: '#fff',
-    borderRadius: 20, padding: 20, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm,
-  },
+  addForm: { marginHorizontal: 16, marginTop: 16, backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm },
   addFormTitle: { fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 16 },
   formField: { marginBottom: 14 },
   formLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 7, letterSpacing: 0.3 },
-  formInput: {
-    backgroundColor: COLORS.lightGray, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
-    fontSize: 15, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border,
-  },
-  saveBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 14, borderRadius: 14, marginTop: 4,
-  },
+  formInput: { backgroundColor: COLORS.lightGray, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14, marginTop: 4 },
   saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
-  // Search
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginHorizontal: 16, marginTop: 16, marginBottom: 8,
-    paddingHorizontal: 14, height: 48, backgroundColor: '#fff',
-    borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm,
-  },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 16, marginBottom: 8, paddingHorizontal: 14, height: 48, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm },
   searchInput: { flex: 1, fontSize: 15, color: COLORS.textPrimary },
 
-  // Records
-  listHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 12,
-  },
+  listHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
   listTitle: { fontSize: 16, fontWeight: '800', color: COLORS.textPrimary },
-  listCountBadge: {
-    backgroundColor: COLORS.primary, width: 24, height: 24, borderRadius: 12,
-    justifyContent: 'center', alignItems: 'center',
-  },
+  listCountBadge: { backgroundColor: COLORS.primary, width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   listCount: { fontSize: 11, fontWeight: '800', color: '#fff' },
 
-  emptyState: {
-    alignItems: 'center', paddingVertical: 48, gap: 10, marginHorizontal: 16,
-    backgroundColor: '#fff', borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed',
-  },
+  emptyState: { alignItems: 'center', paddingVertical: 40, gap: 10, marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed' },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
-  emptyText: { fontSize: 13, color: COLORS.textSecondary },
+  emptyText: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
+  scanBtn: { marginTop: 8, borderRadius: 12, overflow: 'hidden' },
+  scanBtnGrad: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 20, paddingVertical: 11 },
+  scanBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 
-  recordCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    marginHorizontal: 16, marginBottom: 10, padding: 14,
-    backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm,
-  },
-  recordLeft: {},
+  recordCard: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 16, marginBottom: 10, padding: 14, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm },
   recordIcon: { width: 40, height: 40, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   recordCondition: { fontSize: 15, fontWeight: '800', color: COLORS.textPrimary },
   recordMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  recordMedBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6,
-    backgroundColor: COLORS.successBg, paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 8, alignSelf: 'flex-start',
-  },
+  recordMedBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6, backgroundColor: COLORS.successBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
   recordMedText: { fontSize: 11, fontWeight: '600', color: COLORS.primary },
   menuBtn: { padding: 4 },
 });

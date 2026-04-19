@@ -67,6 +67,9 @@ class MedicationTimeResponse(MedicationTimeBase):
 class MedicationBase(BaseModel):
     name: str
     dose: str
+    frequency: Optional[str] = None
+    form: Optional[str] = None
+    duration: Optional[str] = None
     color: str
     color_bg: str
 
@@ -77,8 +80,12 @@ class MedicationTimeCreate(BaseModel):
 
 class MedicationCreate(BaseModel):
     user_id: str
+    member_id: Optional[str] = None
     name: str
     dose: str
+    frequency: Optional[str] = None
+    form: Optional[str] = None
+    duration: Optional[str] = None
     times: Optional[List[MedicationTimeCreate]] = None
 
 class MedicationResponse(MedicationBase):
