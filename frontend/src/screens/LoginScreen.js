@@ -294,7 +294,7 @@ export default function LoginScreen({ navigate, setUser }) {
               </View>
 
               <View style={styles.divider}>
-                <View style={styles.line} /><Text style={styles.dividerText}>OR SIGN IN WITH</Text><View style={styles.line} />
+                <View style={styles.line} /><Text style={styles.dividerText}>OR LOG IN WITH</Text><View style={styles.line} />
               </View>
 
               <TouchableOpacity

@@ -201,7 +201,7 @@ export default function ProfileScreen({ user, setUser, navigate }) {
                             <View style={[styles.actionIcon, { backgroundColor: COLORS.successBg }]}>
                                 <Feather name="log-out" size={20} color={COLORS.primary} />
                             </View>
-                            <Text style={styles.actionText}>Sign Out</Text>
+                            <Text style={styles.actionText}>Log Out</Text>
                             <Feather name="chevron-right" size={20} color={COLORS.textMuted} />
                         </TouchableOpacity>
 
