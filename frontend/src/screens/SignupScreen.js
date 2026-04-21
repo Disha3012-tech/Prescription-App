@@ -261,7 +261,7 @@ export default function SignupScreen({ navigate, setUser }) {
                     <LinearGradient colors={[THEME.primary, THEME.accent]} style={styles.logoGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                       <MaterialCommunityIcons name="pill" size={13} color="#FFF" />
                     </LinearGradient>
-                    <Text style={styles.brandText}>MEDIPATH</Text>
+                    <Text style={styles.brandText}>AiLyze</Text>
                   </View>
                 </View>
 
@@ -288,7 +288,7 @@ export default function SignupScreen({ navigate, setUser }) {
                 </Text>
                 <Text style={styles.heroSub}>
                   {step === 1
-                    ? 'Join MediPath AI for intelligent, personalized medication management.'
+                    ? 'Join AiLyze AI for intelligent, personalized medication management.'
                     : `We sent a 6-digit code to ${email}. Enter it below to activate your account.`}
                 </Text>
               </View>
@@ -396,7 +396,7 @@ export default function SignupScreen({ navigate, setUser }) {
 
               {/* Footer */}
               <View style={styles.footer}>
-                <Text style={styles.footerText}>Already have a MediPath account? </Text>
+                <Text style={styles.footerText}>Already have a AiLyze account? </Text>
                 <TouchableOpacity onPress={() => navigate('LOGIN')} activeOpacity={0.75}>
                   <Text style={styles.footerLink}>Log In →</Text>
                 </TouchableOpacity>

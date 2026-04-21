@@ -205,7 +205,7 @@ export default function LoginScreen({ navigate, setUser }) {
                     <LinearGradient colors={[THEME.primary, THEME.accent]} style={styles.logoGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                       <MaterialCommunityIcons name="pill" size={13} color="#FFF" />
                     </LinearGradient>
-                    <Text style={styles.brandText}>MEDIPATH</Text>
+                    <Text style={styles.brandText}>AiLyze</Text>
                   </View>
                 </View>
 
@@ -229,7 +229,7 @@ export default function LoginScreen({ navigate, setUser }) {
                   <Text style={styles.heroAccent}>Back.</Text>
                 </Text>
                 <Text style={styles.heroSub}>
-                  Log in to continue your personalized medication journey with MediPath AI.
+                  Log in to continue your personalized medication journey with AiLyze AI.
                 </Text>
               </View>
 
@@ -284,11 +284,6 @@ export default function LoginScreen({ navigate, setUser }) {
                   setFocusedField={setFocusedField}
                 />
 
-                {/* Forgot password */}
-                <TouchableOpacity style={styles.forgotRow} activeOpacity={0.7}>
-                  <Text style={styles.forgotText}>Forgot your password?</Text>
-                  <Text style={styles.forgotLink}> Reset it →</Text>
-                </TouchableOpacity>
 
                 {/* Login button */}
                 <TouchableOpacity style={styles.submitBtn} onPress={handleLogin} disabled={loading} activeOpacity={0.88}>
@@ -298,7 +293,7 @@ export default function LoginScreen({ navigate, setUser }) {
                     ) : (
                       <>
                         <MaterialCommunityIcons name="login-variant" size={18} color="rgba(255,255,255,0.7)" />
-                        <Text style={styles.submitBtnText}>Log In to MediPath</Text>
+                        <Text style={styles.submitBtnText}>Log In to AiLyze</Text>
                         <Feather name="arrow-right" size={16} color="#FFF" />
                       </>
                     )}
@@ -326,7 +321,7 @@ export default function LoginScreen({ navigate, setUser }) {
 
               {/* ── Footer ── */}
               <View style={styles.footer}>
-                <Text style={styles.footerText}>New to MediPath? </Text>
+                <Text style={styles.footerText}>New to AiLyze? </Text>
                 <TouchableOpacity onPress={() => navigate('SIGNUP')} activeOpacity={0.75}>
                   <Text style={styles.footerLink}>Create Account →</Text>
                 </TouchableOpacity>
