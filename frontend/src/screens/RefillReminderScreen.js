@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
     SafeAreaView, StatusBar, Switch, ActivityIndicator, Animated, Alert,
@@ -189,10 +189,6 @@ export default function RefillReminderScreen({ user, navigate, goBack, memberId:
     }).length;
     const okCount = meds.length - criticalCount - lowCount;
 
-    const sortedMeds = [...meds].sort((a, b) =>
-        (a.remaining_quantity ?? 30) - (b.remaining_quantity ?? 30)
-    );
-
     const screenTitle = activeMemberName ? `${activeMemberName}'s Refills` : 'Refill Reminders';
     const screenSub = activeMemberName
         ? `Medicine stock levels for ${activeMemberName}`
@@ -321,7 +317,7 @@ export default function RefillReminderScreen({ user, navigate, goBack, memberId:
                             {criticalCount > 0 && (
                                 <>
                                     <Text style={styles.groupLabel}>🚨 Needs Refill Now</Text>
-                                    {sortedMeds
+                                    {meds
                                         .filter(m => (m.remaining_quantity ?? 30) <= (m.refill_threshold ?? 5))
                                         .map(med => (
                                             <MedRefillCard key={med.id} med={med} onToggleReminder={toggleReminder} onUpdateQuantity={updateQuantity} />
@@ -332,7 +328,7 @@ export default function RefillReminderScreen({ user, navigate, goBack, memberId:
                             {lowCount > 0 && (
                                 <>
                                     <Text style={[styles.groupLabel, { marginTop: 8 }]}>⚠️ Running Low</Text>
-                                    {sortedMeds
+                                    {meds
                                         .filter(m => {
                                             const r = m.remaining_quantity ?? 30;
                                             const t = m.refill_threshold ?? 5;
@@ -347,7 +343,7 @@ export default function RefillReminderScreen({ user, navigate, goBack, memberId:
                             {okCount > 0 && (
                                 <>
                                     <Text style={[styles.groupLabel, { marginTop: 8 }]}>✅ Well Stocked</Text>
-                                    {sortedMeds
+                                    {meds
                                         .filter(m => {
                                             const r = m.remaining_quantity ?? 30;
                                             const t = m.refill_threshold ?? 5;

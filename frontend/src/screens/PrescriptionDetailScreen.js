@@ -212,7 +212,8 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
     });
   };
 
-  const medicines = record.fullResults || [];
+  // Get medicines from results (both fullResults and results formats supported)
+  const medicines = record.fullResults || record.results || [];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -228,7 +229,9 @@ export default function PrescriptionDetailScreen({ route, navigation }) {
             <Feather name="arrow-left" size={20} color={COLORS.textPrimary} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle} numberOfLines={1}>{record.condition}</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {record.condition || medicines[0]?.explanation?.medicine_class || 'Medical Visit'}
+            </Text>
             <Text style={styles.headerSub}>{formatDate(record.date)}</Text>
           </View>
         </View>
