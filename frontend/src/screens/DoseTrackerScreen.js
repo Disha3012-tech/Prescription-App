@@ -66,13 +66,6 @@ export default function DoseTrackerScreen({ user, navigate, goBack, currentScree
 
     const [meds, setMeds] = useState([]);
     const [selectedDay, setSelectedDay] = useState(3);
-    const [addingMed, setAddingMed] = useState(false);
-    const [newName, setNewName] = useState('');
-    const [newDose, setNewDose] = useState('');
-    const [newFreq, setNewFreq] = useState('');
-    const [newHour, setNewHour] = useState('08');
-    const [newMin, setNewMin] = useState('00');
-    const [newAmPm, setNewAmPm] = useState('AM');
     const [editingTimeId, setEditingTimeId] = useState(null);
     const [editHour, setEditHour] = useState('');
     const [editMin, setEditMin] = useState('');
@@ -120,34 +113,6 @@ export default function DoseTrackerScreen({ user, navigate, goBack, currentScree
         try {
             await fetch(`${API_URL}api/medications/${medId}/times/${timeId}/toggle`, { method: 'PUT' });
         } catch (err) { fetchMeds(); }
-    };
-
-    const handleAddMed = async () => {
-        if (!newName || !newDose) return;
-        try {
-            const body = {
-                user_id: user.id,
-                name: newName,
-                dose: newDose,
-                frequency: newFreq,
-                form: 'tablet',
-                color: '#7C3AED',
-                times: [{ label: 'Scheduled', time: `${newHour}:${newMin} ${newAmPm}`, icon: 'pill' }],
-            };
-            if (activeMemberId) body.member_id = activeMemberId;
-
-            const response = await fetch(`${API_URL}api/medications`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            if (response.ok) {
-                setAddingMed(false);
-                setNewName(''); setNewDose(''); setNewFreq('');
-                setNewHour('08'); setNewMin('00'); setNewAmPm('AM');
-                fetchMeds();
-            }
-        } catch (err) { console.error('Failed to add med:', err); }
     };
 
     const handleDeleteMed = async (medId) => {
@@ -208,12 +173,6 @@ export default function DoseTrackerScreen({ user, navigate, goBack, currentScree
                                 <Text style={styles.streakEmoji}>🔥</Text>
                                 <Text style={styles.streakText}>{takenDoses > 0 ? 3 : 0}d</Text>
                             </View>
-                            <TouchableOpacity
-                                style={styles.addIconBtn}
-                                onPress={() => setAddingMed(!addingMed)}
-                            >
-                                <Feather name={addingMed ? 'x' : 'plus'} size={20} color="#fff" />
-                            </TouchableOpacity>
                         </View>
                     </View>
 
@@ -270,90 +229,6 @@ export default function DoseTrackerScreen({ user, navigate, goBack, currentScree
                     ))}
                 </ScrollView>
 
-                {/* Add Med Form */}
-                {addingMed && (
-                    <Animated.View style={[styles.addForm, { opacity: fadeAnim }]}>
-                        <Text style={styles.addFormTitle}>
-                            ➕ Add Medication{activeMemberName ? ` for ${activeMemberName}` : ''}
-                        </Text>
-                        <View style={styles.addFormRow}>
-                            <View style={[styles.addInput, { flex: 2 }]}>
-                                <TextInput
-                                    style={styles.addInputText}
-                                    placeholder="Medicine name"
-                                    placeholderTextColor={COLORS.textMuted}
-                                    value={newName}
-                                    onChangeText={setNewName}
-                                />
-                            </View>
-                            <View style={[styles.addInput, { flex: 1 }]}>
-                                <TextInput
-                                    style={styles.addInputText}
-                                    placeholder="Dose"
-                                    placeholderTextColor={COLORS.textMuted}
-                                    value={newDose}
-                                    onChangeText={setNewDose}
-                                />
-                            </View>
-                        </View>
-
-                        <View style={styles.addInput}>
-                            <TextInput
-                                style={styles.addInputText}
-                                placeholder="Frequency (e.g. Twice a day)"
-                                placeholderTextColor={COLORS.textMuted}
-                                value={newFreq}
-                                onChangeText={setNewFreq}
-                            />
-                        </View>
-
-                        <View style={styles.timeEditorRow}>
-                            <Text style={styles.timeEditorLabel}>Reminder Time:</Text>
-                            <View style={styles.timeInputs}>
-                                <View style={styles.timeUnit}>
-                                    <TextInput 
-                                        style={styles.timeUnitInput} 
-                                        keyboardType="numeric" 
-                                        maxLength={2} 
-                                        value={newHour} 
-                                        onChangeText={setNewHour}
-                                        placeholder="HH"
-                                        placeholderTextColor={COLORS.textMuted}
-                                        selectTextOnFocus={true}
-                                    />
-                                </View>
-                                <Text style={styles.timeSeparator}>:</Text>
-                                <View style={styles.timeUnit}>
-                                    <TextInput 
-                                        style={styles.timeUnitInput} 
-                                        keyboardType="numeric" 
-                                        maxLength={2} 
-                                        value={newMin} 
-                                        onChangeText={setNewMin}
-                                        placeholder="MM"
-                                        placeholderTextColor={COLORS.textMuted}
-                                        selectTextOnFocus={true}
-                                    />
-                                </View>
-                                <View style={styles.ampmToggle}>
-                                    <TouchableOpacity style={[styles.ampmBtn, newAmPm === 'AM' && styles.ampmBtnActive]} onPress={() => setNewAmPm('AM')}>
-                                        <Text style={[styles.ampmBtnText, newAmPm === 'AM' && styles.ampmBtnTextActive]}>AM</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={[styles.ampmBtn, newAmPm === 'PM' && styles.ampmBtnActive]} onPress={() => setNewAmPm('PM')}>
-                                        <Text style={[styles.ampmBtnText, newAmPm === 'PM' && styles.ampmBtnTextActive]}>PM</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        </View>
-
-                        <TouchableOpacity onPress={handleAddMed} activeOpacity={0.85}>
-                            <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.saveBtn}>
-                                <Text style={styles.saveBtnText}>Save Medication</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </Animated.View>
-                )}
-
                 {/* Medicine List */}
                 <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
                     {meds.length === 0 ? (
@@ -362,8 +237,8 @@ export default function DoseTrackerScreen({ user, navigate, goBack, currentScree
                             <Text style={styles.emptyTitle}>No medications yet</Text>
                             <Text style={styles.emptyText}>
                                 {activeMemberName
-                                    ? `Add ${activeMemberName}'s first medication using + above`
-                                    : 'Tap + to add your first medication'}
+                                    ? `No medications found for ${activeMemberName}`
+                                    : 'No medications found'}
                             </Text>
                         </View>
                     ) : meds.map(med => (
@@ -491,8 +366,6 @@ const styles = StyleSheet.create({
     streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(245,158,11,0.2)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(252,211,77,0.3)' },
     streakEmoji: { fontSize: 14 },
     streakText: { fontSize: 12, fontWeight: '800', color: '#FCD34D' },
-    addIconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-
     progressCard: { marginHorizontal: 20, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
     progressTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
     progressLabel: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
@@ -515,22 +388,6 @@ const styles = StyleSheet.create({
     dayDotToday: { backgroundColor: COLORS.warningText },
     dayDotFuture: { backgroundColor: COLORS.border },
 
-    addForm: { marginHorizontal: 16, marginBottom: 16, backgroundColor: '#fff', borderRadius: 18, padding: 18, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm, gap: 12 },
-    addFormTitle: { fontSize: 15, fontWeight: '800', color: COLORS.textPrimary },
-    addFormRow: { flexDirection: 'row', gap: 10 },
-    addInput: { backgroundColor: COLORS.lightGray, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: COLORS.border },
-    addInputText: { fontSize: 14, color: COLORS.textPrimary },
-    timeEditorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.lightGray, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: COLORS.border },
-    timeEditorLabel: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary },
-    timeInputs: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    timeUnit: { backgroundColor: '#fff', borderRadius: 8, width: 45, height: 40, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.primary, paddingHorizontal: 4 },
-    timeUnitInput: { fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, textAlign: 'center', width: '100%' },
-    timeSeparator: { fontSize: 16, fontWeight: '900', color: COLORS.textSecondary },
-    ampmToggle: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 8, padding: 2, borderWidth: 1, borderColor: COLORS.border, marginLeft: 4 },
-    ampmBtn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-    ampmBtnActive: { backgroundColor: COLORS.primary },
-    ampmBtnText: { fontSize: 11, fontWeight: '800', color: COLORS.textSecondary },
-    ampmBtnTextActive: { color: '#fff' },
     doseTimeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     editTimeBtn: { padding: 4 },
     inlineEditor: { flexDirection: 'row', alignItems: 'center', gap: 8 },

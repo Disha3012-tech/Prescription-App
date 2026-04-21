@@ -14,67 +14,22 @@ const STAT_COLORS = [
   { colors: ['#F59E0B', '#D97706'], icon: 'calendar-month-outline' },
 ];
 
-// ─── Member Banner ─────────────────────────────────────────────────────────────
-const MemberBanner = ({ memberName, onClear }) => (
-  <View style={banner.wrap}>
-    <LinearGradient colors={['#0D9488', '#0891B2']} style={banner.avatar}>
-      <Text style={banner.avatarText}>{memberName[0].toUpperCase()}</Text>
-    </LinearGradient>
-    <View style={{ flex: 1 }}>
-      <Text style={banner.label}>Viewing records for</Text>
-      <Text style={banner.name}>{memberName}</Text>
-    </View>
-    <TouchableOpacity style={banner.clearBtn} onPress={onClear}>
-      <Feather name="x" size={13} color={COLORS.textSecondary} />
-      <Text style={banner.clearText}>Show mine</Text>
-    </TouchableOpacity>
-  </View>
-);
-const banner = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
-    backgroundColor: '#fff', borderRadius: 16, padding: 12,
-    borderWidth: 1.5, borderColor: COLORS.primary + '40', ...SHADOWS.sm,
-  },
-  avatar: {
-    width: 38, height: 38, borderRadius: 19,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  avatarText: { fontSize: 16, fontWeight: '900', color: '#fff' },
-  label: { fontSize: 11, color: COLORS.textMuted, fontWeight: '600' },
-  name: { fontSize: 15, fontWeight: '800', color: COLORS.textPrimary },
-  clearBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: COLORS.lightGray, paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 10, borderWidth: 1, borderColor: COLORS.border,
-  },
-  clearText: { fontSize: 11, fontWeight: '700', color: COLORS.textSecondary },
-});
-
 export default function MedicalHistoryScreen({ user, navigate, goBack, memberId: propMemberId, memberName: propMemberName }) {
-  // memberId can come from props (family nav) or be cleared to show own records
   const [activeMemberId, setActiveMemberId] = useState(propMemberId || null);
   const [activeMemberName, setActiveMemberName] = useState(propMemberName || null);
 
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
-  const [newCondition, setNewCondition] = useState('');
-  const [newDoctor, setNewDoctor] = useState('');
-  const [newNotes, setNewNotes] = useState('');
   const [expanded, setExpanded] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Re-fetch whenever the active member changes
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: false }).start();
     if (user?.id) fetchHistory();
   }, [user, activeMemberId]);
 
-  // Sync prop changes (e.g. navigating from a different family member)
   useEffect(() => {
     setActiveMemberId(propMemberId || null);
     setActiveMemberName(propMemberName || null);
@@ -83,8 +38,6 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
   const fetchHistory = async () => {
     try {
       setLoading(true);
-
-      // Build URL — include member_id if we're viewing a family member
       let url = `${API_URL}api/prescriptions/history?user_id=${user.id}`;
       if (activeMemberId) url += `&member_id=${activeMemberId}`;
 
@@ -119,32 +72,6 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
     }
   };
 
-  const handleAdd = async () => {
-    if (!newCondition) return;
-    try {
-      const body = {
-        user_id: user.id,
-        condition: newCondition,
-        doctor: newDoctor || 'Unknown Doctor',
-        notes: newNotes,
-      };
-      if (activeMemberId) body.member_id = activeMemberId;
-
-      const response = await fetch(`${API_URL}api/prescriptions/manual`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (response.ok) {
-        setAdding(false);
-        setNewCondition(''); setNewDoctor(''); setNewNotes('');
-        fetchHistory();
-      }
-    } catch (err) {
-      console.error('Error adding record:', err);
-    }
-  };
-
   const deleteRecord = async (id) => {
     try {
       const response = await fetch(`${API_URL}api/prescriptions/${id}`, { method: 'DELETE' });
@@ -173,12 +100,8 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
     new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const activeRecord = records.find(r => r.id === expanded);
-
-  // Dynamic header title
   const screenTitle = activeMemberName ? `${activeMemberName}'s History` : 'Medical History';
-  const screenSub = activeMemberName
-    ? `Prescription records for ${activeMemberName}`
-    : 'Your complete health record';
+  const screenSub = activeMemberName ? `Prescription records for ${activeMemberName}` : 'Your complete health record';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -192,10 +115,8 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
               <Feather name="alert-triangle" size={28} color={COLORS.dangerText} />
             </View>
             <Text style={styles.confirmTitle}>Delete Record?</Text>
-            <Text style={styles.confirmMessage}>
-              This prescription will be permanently removed. This action cannot be undone.
-            </Text>
-            <View style={styles.confirmButtons}>
+            <Text style={styles.confirmMessage}>This prescription will be permanently removed.</Text>
+            <div style={styles.confirmButtons}>
               <TouchableOpacity style={styles.confirmBtnCancel} onPress={() => setDeleteConfirm(null)}>
                 <Text style={styles.confirmBtnCancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -204,7 +125,7 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
                   <Text style={styles.confirmBtnDeleteText}>Delete</Text>
                 </LinearGradient>
               </TouchableOpacity>
-            </View>
+            </div>
           </Pressable>
         </Pressable>
       </Modal>
@@ -258,8 +179,6 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
                     avg_confidence: activeRecord.avg_confidence,
                     image_url: activeRecord.raw_image_url,
                   },
-                  country: activeRecord.country || 'India',
-                  currency: activeRecord.currency || 'INR',
                   userId: user.id,
                   memberId: activeMemberId,
                   prescriptionId: activeRecord.id,
@@ -313,15 +232,9 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
               <Text style={styles.headerTitle}>{screenTitle}</Text>
               <Text style={styles.headerSub}>{screenSub}</Text>
             </View>
-            <TouchableOpacity
-              style={[styles.addBtn, adding && { backgroundColor: 'rgba(220,38,38,0.3)' }]}
-              onPress={() => setAdding(!adding)}
-            >
-              <Feather name={adding ? 'x' : 'plus'} size={20} color="#fff" />
-            </TouchableOpacity>
+            {/* Plus Button Removed from Header */}
           </View>
 
-          {/* User/member card */}
           <View style={styles.userCard}>
             <LinearGradient
               colors={activeMemberId ? ['#7C3AED', '#6D28D9'] : ['#0D9488', '#0891B2']}
@@ -355,7 +268,6 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
             )}
           </View>
 
-          {/* Stats */}
           <View style={styles.statsRow}>
             {stats.map((s, i) => (
               <View key={i} style={styles.statCard}>
@@ -370,38 +282,6 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
         </LinearGradient>
 
         {loading && <ActivityIndicator color={COLORS.primary} style={{ marginTop: 30 }} />}
-
-        {/* Add Form */}
-        {adding && (
-          <Animated.View style={[styles.addForm, { opacity: fadeAnim }]}>
-            <Text style={styles.addFormTitle}>
-              New Record{activeMemberName ? ` for ${activeMemberName}` : ''}
-            </Text>
-            {[
-              { label: 'Condition / Diagnosis', value: newCondition, set: setNewCondition, placeholder: 'e.g. Seasonal Allergies' },
-              { label: 'Doctor Name', value: newDoctor, set: setNewDoctor, placeholder: 'e.g. Dr. Sharma' },
-              { label: 'Notes', value: newNotes, set: setNewNotes, placeholder: 'Additional notes...', multiline: true },
-            ].map((field, i) => (
-              <View key={i} style={styles.formField}>
-                <Text style={styles.formLabel}>{field.label}</Text>
-                <TextInput
-                  style={[styles.formInput, field.multiline && { height: 80, textAlignVertical: 'top' }]}
-                  placeholder={field.placeholder}
-                  placeholderTextColor={COLORS.textMuted}
-                  value={field.value}
-                  onChangeText={field.set}
-                  multiline={field.multiline}
-                />
-              </View>
-            ))}
-            <TouchableOpacity onPress={handleAdd} activeOpacity={0.85}>
-              <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.saveBtn}>
-                <Feather name="check" size={16} color="#fff" />
-                <Text style={styles.saveBtnText}>Save Record</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
 
         {/* Search */}
         <View style={styles.searchBar}>
@@ -420,7 +300,6 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
           ) : null}
         </View>
 
-        {/* Section header */}
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>Past Records</Text>
           <View style={styles.listCountBadge}>
@@ -428,29 +307,18 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
           </View>
         </View>
 
-        {/* Empty state */}
         {!loading && filtered.length === 0 && (
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="clipboard-text-outline" size={44} color={COLORS.border} />
             <Text style={styles.emptyTitle}>No records found</Text>
             <Text style={styles.emptyText}>
               {activeMemberName
-                ? `Scan a prescription for ${activeMemberName} to get started`
-                : 'Scan a prescription to get started'}
+                ? `No prescription records found for ${activeMemberName}`
+                : 'No prescription records found'}
             </Text>
-            <TouchableOpacity
-              style={styles.scanBtn}
-              onPress={() => navigate('SCANNER', activeMemberId ? { memberId: activeMemberId } : undefined)}
-            >
-              <LinearGradient colors={['#0D9488', '#0891B2']} style={styles.scanBtnGrad}>
-                <Feather name="camera" size={15} color="#fff" />
-                <Text style={styles.scanBtnText}>Scan Prescription</Text>
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
         )}
 
-        {/* Records */}
         {filtered.map((record) => (
           <Animated.View key={record.id} style={{ opacity: fadeAnim }}>
             <TouchableOpacity
@@ -494,7 +362,6 @@ export default function MedicalHistoryScreen({ user, navigate, goBack, memberId:
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-
   confirmBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
   confirmDialog: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 360, alignItems: 'center', ...SHADOWS.xl },
   confirmIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.dangerBg, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
@@ -506,7 +373,6 @@ const styles = StyleSheet.create({
   confirmBtnDelete: { flex: 1, borderRadius: 14, overflow: 'hidden' },
   confirmBtnDeleteGradient: { paddingVertical: 14, alignItems: 'center' },
   confirmBtnDeleteText: { fontSize: 15, fontWeight: '700', color: '#fff' },
-
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: '#fff', borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingHorizontal: 20, paddingBottom: 36, paddingTop: 12, ...SHADOWS.lg },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 18 },
@@ -520,15 +386,12 @@ const styles = StyleSheet.create({
   sheetDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 4 },
   sheetCancel: { marginTop: 12, paddingVertical: 14, backgroundColor: COLORS.lightGray, borderRadius: 14, alignItems: 'center' },
   sheetCancelText: { fontSize: 15, fontWeight: '700', color: COLORS.textSecondary },
-
   header: { paddingBottom: 24, position: 'relative', overflow: 'hidden' },
   bgCircle: { position: 'absolute', width: 240, height: 240, borderRadius: 120, backgroundColor: 'rgba(13,148,136,0.08)', top: -80, right: -60 },
   headerTop: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   headerTitle: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   headerSub: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
-  addBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-
   userCard: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 20, marginBottom: 14, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   userAvatar: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
   userAvatarText: { fontSize: 18, fontWeight: '900', color: '#fff' },
@@ -538,36 +401,20 @@ const styles = StyleSheet.create({
   verifiedText: { fontSize: 11, fontWeight: '700', color: '#34D399' },
   switchBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   switchBtnText: { fontSize: 11, fontWeight: '700', color: '#5EEAD4' },
-
   statsRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 10 },
   statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 14, padding: 14, alignItems: 'center', gap: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
   statIcon: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   statValue: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
   statLabel: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.45)', textAlign: 'center' },
-
-  addForm: { marginHorizontal: 16, marginTop: 16, backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm },
-  addFormTitle: { fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 16 },
-  formField: { marginBottom: 14 },
-  formLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 7, letterSpacing: 0.3 },
-  formInput: { backgroundColor: COLORS.lightGray, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border },
-  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14, marginTop: 4 },
-  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 16, marginBottom: 8, paddingHorizontal: 14, height: 48, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm },
   searchInput: { flex: 1, fontSize: 15, color: COLORS.textPrimary },
-
   listHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
   listTitle: { fontSize: 16, fontWeight: '800', color: COLORS.textPrimary },
   listCountBadge: { backgroundColor: COLORS.primary, width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   listCount: { fontSize: 11, fontWeight: '800', color: '#fff' },
-
-  emptyState: { alignItems: 'center', paddingVertical: 40, gap: 10, marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed' },
+  emptyState: { alignItems: 'center', paddingVertical: 60, gap: 10, marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed' },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary },
   emptyText: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
-  scanBtn: { marginTop: 8, borderRadius: 12, overflow: 'hidden' },
-  scanBtnGrad: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 20, paddingVertical: 11 },
-  scanBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
-
   recordCard: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 16, marginBottom: 10, padding: 14, backgroundColor: '#fff', borderRadius: 18, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm },
   recordIcon: { width: 40, height: 40, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   recordCondition: { fontSize: 15, fontWeight: '800', color: COLORS.textPrimary },
