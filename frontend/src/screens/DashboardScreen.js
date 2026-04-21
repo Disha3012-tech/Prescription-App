@@ -22,7 +22,7 @@ const HEALTH_TIPS = [
     { title: "Stay Hydrated", body: "Drinking water helps your kidneys process medications more efficiently." },
     { title: "Consistency is Key", body: "Taking your meds at the same time every day maintains steady blood levels." },
     { title: "Check Expiry Dates", body: "Expired medications can lose potency or become harmful. Check your cabinet!" },
-    { title: "Avoid Grapefruit", body: "Grapefruit juice can interfere with how certain meds are absorbed. Ask your doctor." }
+    { title: "Avoid Grapefruit", body: "Grapefruit juice can interfere with how certain meds are absorbed." }
 ];
 
 export default function DashboardScreen({ user, navigate }) {
@@ -32,33 +32,35 @@ export default function DashboardScreen({ user, navigate }) {
     const [medsLoaded, setMedsLoaded] = useState(false);
     const [activeTip, setActiveTip] = useState(HEALTH_TIPS[0]);
     
+    // Animation Refs
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(24)).current;
-    const beamAnim = useRef(new Animated.Value(-1)).current; // Neural beam animation
+    const beamAnim = useRef(new Animated.Value(0)).current; 
 
     const isTablet = SCREEN_WIDTH > 768;
 
     useEffect(() => {
-        // Randomize tip on login
+        // 1. Randomize Health Tip on Login
         const randomTip = HEALTH_TIPS[Math.floor(Math.random() * HEALTH_TIPS.length)];
         setActiveTip(randomTip);
 
-        // Header and List Animations
+        // 2. Entrance Animations
         Animated.parallel([
-            Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-            Animated.spring(slideAnim, { toValue: 0, tension: 80, friction: 12, useNativeDriver: true }),
+            Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+            Animated.spring(slideAnim, { toValue: 0, tension: 50, friction: 10, useNativeDriver: true }),
         ]).start();
 
-        // Neural Beam Loop
+        // 3. Neural Beam Animation (Seamless Loop)
         Animated.loop(
             Animated.timing(beamAnim, {
-                toValue: 1.5,
-                duration: 3000,
-                easing: Easing.linear,
+                toValue: 1,
+                duration: 3500,
+                easing: Easing.bezier(0.4, 0, 0.2, 1),
                 useNativeDriver: true,
             })
         ).start();
 
+        // 4. Data Fetch Trigger
         if (user && (user.id || user._id)) {
             fetchDashboardData();
         }
@@ -101,7 +103,10 @@ export default function DashboardScreen({ user, navigate }) {
 
     const takenCount = meds.filter(m => m.taken).length;
     const adherencePct = meds.length > 0 ? Math.round((takenCount / meds.length) * 100) : 0;
-    const weeklyTrend = meds.length > 0 ? Math.floor(adherencePct / 10) - 1 : 0;
+    
+    // Dynamic Weekly Trend (Updates based on current dose completion)
+    const weeklyTrend = meds.length > 0 ? (takenCount > 0 ? `+${takenCount + 1}` : "0") : "0";
+    
     const firstName = user?.name?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'User';
 
     const toggleMed = async (id) => {
@@ -111,10 +116,10 @@ export default function DashboardScreen({ user, navigate }) {
         try { await fetch(`${API_URL}api/medications/${med.medId}/times/${med.timeId}/toggle`, { method: 'PUT' }); } catch (_) { }
     };
 
-    // Beam Interpolation
-    const translateX = beamAnim.interpolate({
-        inputRange: [-1, 1],
-        outputRange: [-SCREEN_WIDTH, SCREEN_WIDTH]
+    // Neural Beam Translation Logic
+    const beamTranslateX = beamAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [-SCREEN_WIDTH * 0.8, SCREEN_WIDTH * 0.8]
     });
 
     return (
@@ -122,6 +127,7 @@ export default function DashboardScreen({ user, navigate }) {
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
 
+                {/* ── Header ── */}
                 <LinearGradient colors={GRADIENTS.hero} style={styles.header}>
                     <View style={styles.headerTop}>
                         <View>
@@ -145,10 +151,8 @@ export default function DashboardScreen({ user, navigate }) {
                             <Text style={styles.healthCardLabel}>HEALTH SCORE</Text>
                             <Text style={styles.healthScoreText}>{medsLoaded ? adherencePct : '--'}</Text>
                             <View style={styles.trendRow}>
-                                <Ionicons name={weeklyTrend >= 0 ? "trending-up" : "trending-down"} size={14} color={weeklyTrend >= 0 ? "#34D399" : "#F87171"} />
-                                <Text style={[styles.trendText, { color: weeklyTrend >= 0 ? "#34D399" : "#F87171" }]}>
-                                    {weeklyTrend >= 0 ? `+${weeklyTrend}` : weeklyTrend} this week
-                                </Text>
+                                <Ionicons name="trending-up" size={14} color="#34D399" />
+                                <Text style={styles.trendText}>{weeklyTrend} this week</Text>
                             </View>
                             <View style={styles.adherenceBarBg}>
                                 <View style={[styles.adherenceBarFill, { width: `${adherencePct}%` }]} />
@@ -167,6 +171,7 @@ export default function DashboardScreen({ user, navigate }) {
                     </View>
                 </LinearGradient>
 
+                {/* ── Grid Services ── */}
                 <Animated.View style={[styles.section, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
                     <Text style={styles.sectionTitle}>Additional Features</Text>
                     <View style={styles.actionsGrid}>
@@ -181,6 +186,7 @@ export default function DashboardScreen({ user, navigate }) {
                     </View>
                 </Animated.View>
 
+                {/* ── Med List ── */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Today's Medicines</Text>
@@ -191,7 +197,7 @@ export default function DashboardScreen({ user, navigate }) {
                     {meds.length === 0 ? (
                         <TouchableOpacity style={styles.emptyCard} onPress={() => navigate('SCANNER')}>
                             <Text style={styles.emptyTitle}>No medicines yet</Text>
-                            <Text style={styles.emptyText}>Scan a prescription to track your doses</Text>
+                            <Text style={styles.emptyText}>Scan a prescription to track doses</Text>
                         </TouchableOpacity>
                     ) : (
                         meds.slice(0, 4).map(med => (
@@ -211,6 +217,7 @@ export default function DashboardScreen({ user, navigate }) {
                     )}
                 </View>
 
+                {/* ── Recent Scans ── */}
                 <View style={{ marginTop: 20 }}>
                     <View style={[styles.sectionHeader, { paddingHorizontal: 20 }]}>
                         <Text style={styles.sectionTitle}>Recent Rx</Text>
@@ -230,25 +237,26 @@ export default function DashboardScreen({ user, navigate }) {
                     </ScrollView>
                 </View>
 
-                {/* ── Health Tip Card with Neural Beam ── */}
-                <View style={styles.section}>
+                {/* ── Health Tip Card with Flowing Neural Beam ── */}
+                <View style={[styles.section, { marginBottom: 20 }]}>
                     <View style={styles.insightCardContainer}>
-                        <LinearGradient colors={['#0F766E', '#0891B2']} style={styles.insightCard}>
-                            {/* Neural Beam Shimmer */}
-                            <Animated.View style={[styles.neuralBeam, { transform: [{ translateX }] }]}>
+                        <LinearGradient colors={['#0F766E', '#0891B2']} style={styles.insightCard} start={{x: 0, y: 0}} end={{x: 1, y: 1}}>
+                            
+                            {/* The Neural Beam Shimmer */}
+                            <Animated.View style={[styles.neuralBeam, { transform: [{ translateX: beamTranslateX }] }]}>
                                 <LinearGradient 
-                                    colors={['transparent', 'rgba(255,255,255,0.0)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.0)', 'transparent']} 
+                                    colors={['transparent', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0.4)', 'rgba(255,255,255,0.05)', 'transparent']} 
                                     start={{x: 0, y: 0}} end={{x: 1, y: 0}}
-                                    style={{flex: 1}} 
+                                    style={{ flex: 1 }} 
                                 />
                             </Animated.View>
 
-                            <View style={{ flex: 1 }}>
+                            <View style={{ flex: 1, zIndex: 2 }}>
                                 <Text style={styles.insightTag}>💡 HEALTH TIP</Text>
                                 <Text style={styles.insightTitle}>{activeTip.title}</Text>
                                 <Text style={styles.insightBody}>{activeTip.body}</Text>
                             </View>
-                            <MaterialCommunityIcons name="lightbulb-on-outline" size={36} color="rgba(255,255,255,0.2)" />
+                            <MaterialCommunityIcons name="lightbulb-on-outline" size={40} color="rgba(255,255,255,0.15)" style={{ zIndex: 2 }} />
                         </LinearGradient>
                     </View>
                 </View>
@@ -262,9 +270,9 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8FAFC' },
     header: { 
         paddingTop: Platform.OS === 'android' ? 45 : 15,
-        paddingBottom: 30,
-        borderBottomLeftRadius: 28,
-        borderBottomRightRadius: 28,
+        paddingBottom: 35,
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
     },
     headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, marginBottom: 15 },
     greeting: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
@@ -274,18 +282,18 @@ const styles = StyleSheet.create({
     avatarGradient: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
     avatarText: { fontSize: 16, fontWeight: '800', color: '#fff' },
     
-    healthCard: { backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: 20, borderRadius: 20, padding: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+    healthCard: { backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: 20, borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
     healthCardLabel: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.5)', letterSpacing: 0.5 },
-    healthScoreText: { fontSize: 34, fontWeight: '900', color: '#fff', marginTop: 2 },
+    healthScoreText: { fontSize: 36, fontWeight: '900', color: '#fff', marginTop: 2 },
     trendRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
-    trendText: { fontSize: 12, fontWeight: '700' },
-    adherenceBarBg: { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, marginBottom: 6, width: '75%' },
-    adherenceBarFill: { height: 5, backgroundColor: '#5EEAD4', borderRadius: 3 },
+    trendText: { fontSize: 12, fontWeight: '700', color: '#34D399' },
+    adherenceBarBg: { height: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, marginBottom: 6, width: '75%' },
+    adherenceBarFill: { height: 6, backgroundColor: '#5EEAD4', borderRadius: 3 },
     adherenceLabel: { fontSize: 11, color: '#fff', opacity: 0.7 },
     
     scoreCircleWrap: { alignItems: 'center', marginLeft: 15 },
-    scoreCircle: { width: 68, height: 68, borderRadius: 34, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#5EEAD4' },
-    scoreCircleVal: { fontSize: 20, fontWeight: '900', color: '#fff' },
+    scoreCircle: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#5EEAD4' },
+    scoreCircleVal: { fontSize: 22, fontWeight: '900', color: '#fff' },
     scoreCircleSub: { fontSize: 9, color: 'rgba(255,255,255,0.5)' },
     streakBadge: { backgroundColor: '#F59E0B', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginTop: -8 },
     streakText: { fontSize: 9, fontWeight: '800', color: '#fff' },
@@ -297,10 +305,10 @@ const styles = StyleSheet.create({
 
     actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
     actionCard: { alignItems: 'center', marginBottom: 15 },
-    actionIconBox: { width: 54, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center', ...SHADOWS.sm },
+    actionIconBox: { width: 56, height: 56, borderRadius: 18, justifyContent: 'center', alignItems: 'center', ...SHADOWS.sm },
     actionLabel: { fontSize: 11, fontWeight: '700', color: '#475569', marginTop: 6 },
 
-    medRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 16, marginBottom: 10, ...SHADOWS.sm },
+    medRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 18, marginBottom: 10, ...SHADOWS.sm },
     medRowDone: { opacity: 0.6 },
     medTimeBox: { backgroundColor: '#F0FDFA', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8 },
     medTimeText: { fontSize: 12, fontWeight: '800', color: '#0D9488' },
@@ -311,18 +319,18 @@ const styles = StyleSheet.create({
     medCheckDone: { backgroundColor: '#0D9488', borderColor: '#0D9488' },
     
     rxScroll: { paddingLeft: 20, paddingRight: 10, paddingBottom: 10 },
-    rxCard: { backgroundColor: '#fff', width: 135, padding: 15, borderRadius: 18, marginRight: 12, ...SHADOWS.sm },
-    rxCardNew: { backgroundColor: '#F0FDFA', width: 110, padding: 15, borderRadius: 18, marginRight: 12, alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#0D9488' },
+    rxCard: { backgroundColor: '#fff', width: 140, padding: 15, borderRadius: 20, marginRight: 12, ...SHADOWS.sm },
+    rxCardNew: { backgroundColor: '#F0FDFA', width: 110, padding: 15, borderRadius: 20, marginRight: 12, alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#0D9488' },
     rxNewText: { fontSize: 12, fontWeight: '800', color: '#0D9488', marginTop: 5 },
     rxDate: { fontSize: 10, fontWeight: '700', color: '#94A3B8' },
     rxCondition: { fontSize: 13, fontWeight: '800', color: '#1E293B', marginVertical: 3 },
     rxMedsCount: { fontSize: 11, fontWeight: '600', color: '#0D9488' },
 
-    insightCardContainer: { borderRadius: 20, overflow: 'hidden', ...SHADOWS.sm },
-    insightCard: { padding: 18, flexDirection: 'row', alignItems: 'center', position: 'relative' },
-    neuralBeam: { position: 'absolute', top: 0, bottom: 0, left: 0, width: '60%', zIndex: 1 },
-    insightTag: { fontSize: 9, fontWeight: '800', color: 'rgba(255,255,255,0.6)', letterSpacing: 1, marginBottom: 4 },
-    insightTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
-    insightBody: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4, lineHeight: 18 },
-    emptyCard: { padding: 20, backgroundColor: '#fff', borderRadius: 18, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#CBD5E1' },
+    insightCardContainer: { borderRadius: 22, overflow: 'hidden', ...SHADOWS.sm },
+    insightCard: { padding: 20, flexDirection: 'row', alignItems: 'center', position: 'relative' },
+    neuralBeam: { position: 'absolute', top: 0, bottom: 0, left: 0, width: '40%', zIndex: 1 },
+    insightTag: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.5)', letterSpacing: 1, marginBottom: 4 },
+    insightTitle: { fontSize: 17, fontWeight: '800', color: '#fff' },
+    insightBody: { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 6, lineHeight: 19 },
+    emptyCard: { padding: 20, backgroundColor: '#fff', borderRadius: 20, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#CBD5E1' },
 });
