@@ -183,7 +183,7 @@ export default function OnboardingScreen({ navigate }) {
                   <MaterialCommunityIcons name="pill" size={16} color="#FFF" />
                 </LinearGradient>
                 <View>
-                  <Text style={styles.brandText}>MEDIPATH</Text>
+                  <Text style={styles.brandText}>AiLyze</Text>
                   <Text style={styles.brandSub}>AI</Text>
                 </View>
               </View>
@@ -245,7 +245,7 @@ export default function OnboardingScreen({ navigate }) {
                       </LinearGradient>
                     </LinearGradient>
                   </View>
-                  <Text style={styles.featuresColTitle}>Why MediPath?</Text>
+                  <Text style={styles.featuresColTitle}>Why AiLyze?</Text>
                   <View style={styles.featuresList}>
                     {features.map((f, i) => <FeatureItem key={i} {...f} />)}
                   </View>
@@ -272,7 +272,7 @@ export default function OnboardingScreen({ navigate }) {
                 {/* Card text */}
                 <Text style={[styles.cardTitle, isLaptop && { fontSize: 26 }]}>Start Your Journey</Text>
                 <Text style={[styles.cardSub, isLaptop && { fontSize: 15 }]}>
-                  Create your profile and let MediPath AI analyze, protect, and personalize your medication plan.
+                  Create your profile and let AiLyze AI analyze, protect, and personalize your medication plan.
                 </Text>
 
                 {/* Features list on phone/tablet */}
@@ -282,13 +282,7 @@ export default function OnboardingScreen({ navigate }) {
                   </View>
                 )}
 
-                {/* Progress indicator */}
-                <View style={styles.progressRow}>
-                  <View style={styles.progressBar}>
-                    <LinearGradient colors={[THEME.primary, THEME.accent]} style={styles.progressFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} />
-                  </View>
-                  <Text style={styles.progressLabel}>Step 1 of 3</Text>
-                </View>
+                
 
                 {/* CTA Button */}
                 <TouchableOpacity style={styles.ctaBtn} activeOpacity={0.88} onPress={() => navigate?.('SIGNUP')}>

@@ -234,7 +234,7 @@ export default function LandingScreen({ navigate }) {
                 <MaterialCommunityIcons name="pill" size={16} color="#FFF" />
               </LinearGradient>
               <View>
-                <Text style={styles.brandText}>MEDIPATH</Text>
+                <Text style={styles.brandText}>AiLyze</Text>
                 <Text style={styles.brandSub}>AI</Text>
               </View>
             </View>
@@ -331,7 +331,7 @@ export default function LandingScreen({ navigate }) {
                   <View style={styles.pipelineHeaderLeft}>
                     <Text style={[styles.sectionLabel, { marginBottom: 6, marginTop: 0 }]}>OPERATIONAL PIPELINE</Text>
                     <Text style={[styles.pipelineSectionTitle, isTablet && { fontSize: isLaptop ? 32 : 26 }]}>
-                      How MediPath{'\n'}processes your Rx
+                      How AiLyze{'\n'}processes your Rx
                     </Text>
                     <Text style={[styles.pipelineSubtitle, isTablet && { fontSize: 15 }]}>
                       Five intelligent stages — from raw scan to personalized care.
