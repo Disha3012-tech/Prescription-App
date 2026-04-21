@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    SafeAreaView, StatusBar, Animated, useWindowDimensions
+    SafeAreaView, StatusBar, Animated, useWindowDimensions, Platform, Easing
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, GRADIENTS, SHADOWS, RADIUS } from '../theme';
+import { COLORS, GRADIENTS, SHADOWS } from '../theme';
 import { MaterialCommunityIcons, Feather, Ionicons } from '@expo/vector-icons';
 import { API_URL } from '../config';
 
@@ -17,54 +17,70 @@ const ADDITIONAL_FEATURES = [
     { label: 'Symptoms', icon: 'stethoscope', bg: ['#8B5CF6', '#7C3AED'], screen: 'SYMPTOM_LOOKUP' },
 ];
 
+const HEALTH_TIPS = [
+    { title: "Generic = Same Medicine", body: "Generic medicines contain identical active ingredients and work the same way." },
+    { title: "Stay Hydrated", body: "Drinking water helps your kidneys process medications more efficiently." },
+    { title: "Consistency is Key", body: "Taking your meds at the same time every day maintains steady blood levels." },
+    { title: "Check Expiry Dates", body: "Expired medications can lose potency or become harmful. Check your cabinet!" },
+    { title: "Avoid Grapefruit", body: "Grapefruit juice can interfere with how certain meds are absorbed. Ask your doctor." }
+];
+
 export default function DashboardScreen({ user, navigate }) {
     const { width: SCREEN_WIDTH } = useWindowDimensions();
     const [meds, setMeds] = useState([]);
     const [recentScans, setRecentScans] = useState([]);
     const [medsLoaded, setMedsLoaded] = useState(false);
+    const [activeTip, setActiveTip] = useState(HEALTH_TIPS[0]);
+    
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(24)).current;
+    const beamAnim = useRef(new Animated.Value(-1)).current; // Neural beam animation
 
-    // Responsive scaling helper
-    const wp = (percentage) => (percentage * SCREEN_WIDTH) / 100;
     const isTablet = SCREEN_WIDTH > 768;
 
     useEffect(() => {
+        // Randomize tip on login
+        const randomTip = HEALTH_TIPS[Math.floor(Math.random() * HEALTH_TIPS.length)];
+        setActiveTip(randomTip);
+
+        // Header and List Animations
         Animated.parallel([
             Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
             Animated.spring(slideAnim, { toValue: 0, tension: 80, friction: 12, useNativeDriver: true }),
         ]).start();
-        if (user?.id) fetchDashboardData();
+
+        // Neural Beam Loop
+        Animated.loop(
+            Animated.timing(beamAnim, {
+                toValue: 1.5,
+                duration: 3000,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            })
+        ).start();
+
+        if (user && (user.id || user._id)) {
+            fetchDashboardData();
+        }
     }, [user]);
 
     const fetchDashboardData = async () => {
+        const userId = user.id || user._id;
         try {
             const [histRes, medsRes] = await Promise.all([
-                fetch(`${API_URL}api/prescriptions/history?user_id=${user.id}`),
-                fetch(`${API_URL}api/medications?user_id=${user.id}`),
+                fetch(`${API_URL}api/prescriptions/history?user_id=${userId}`),
+                fetch(`${API_URL}api/medications?user_id=${userId}`),
             ]);
             const data = await histRes.json();
             if (data.status === 'success') {
                 const formattedScans = data.history.map(item => {
                     const d = new Date(item.date);
-                    const isToday = new Date().toDateString() === d.toDateString();
                     return {
                         id: item.id,
-                        date: isToday ? 'Today' : d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
-                        doctor: item.results?.[0]?.explanation?.brand_name || 'Rx Scan',
-                        meds: item.results ? item.results.length : 0,
+                        date: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
                         condition: item.results?.[0]?.explanation?.medicine_class || 'General',
-                        fullRecord: {
-                            id: item.id, date: item.date,
-                            condition: item.results?.[0]?.explanation?.medicine_class || 'General Checkup',
-                            doctor: item.results?.[0]?.explanation?.brand_name || 'Prescription Scan',
-                            medicines: item.results ? item.results.map(r => r.medicine) : [],
-                            fullResults: item.results,
-                            notes: item.results?.[0]?.explanation?.what_it_does || item.raw_text?.substring(0, 100),
-                            image_url: item.image_url ? (item.image_url.startsWith('http') ? item.image_url : `${API_URL.replace(/\/$/, '')}${item.image_url}`) : null,
-                            raw_text: item.raw_text, avg_confidence: item.avg_confidence,
-                            country: item.country, currency: item.currency,
-                        },
+                        meds: item.results ? item.results.length : 0,
+                        fullRecord: item,
                     };
                 }).slice(0, 5);
                 setRecentScans(formattedScans);
@@ -74,7 +90,7 @@ export default function DashboardScreen({ user, navigate }) {
                 let flat = [];
                 medsData.forEach(med => {
                     (med.times || []).forEach(t => {
-                        flat.push({ id: `${med.id}_${t.id}`, medId: med.id, timeId: t.id, name: med.name, dose: med.dose, time: t.time, label: t.label, taken: t.taken, icon: t.icon || 'pill' });
+                        flat.push({ id: `${med.id}_${t.id}`, medId: med.id, timeId: t.id, name: med.name, dose: med.dose, time: t.time, taken: t.taken, icon: t.icon || 'pill' });
                     });
                 });
                 setMeds(flat);
@@ -85,93 +101,77 @@ export default function DashboardScreen({ user, navigate }) {
 
     const takenCount = meds.filter(m => m.taken).length;
     const adherencePct = meds.length > 0 ? Math.round((takenCount / meds.length) * 100) : 0;
+    const weeklyTrend = meds.length > 0 ? Math.floor(adherencePct / 10) - 1 : 0;
+    const firstName = user?.name?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'User';
 
     const toggleMed = async (id) => {
         const med = meds.find(m => m.id === id);
         if (!med) return;
         setMeds(prev => prev.map(m => m.id === id ? { ...m, taken: !m.taken } : m));
-        if (med.medId && med.timeId) {
-            try { await fetch(`${API_URL}api/medications/${med.medId}/times/${med.timeId}/toggle`, { method: 'PUT' }); } catch (_) { }
-        }
+        try { await fetch(`${API_URL}api/medications/${med.medId}/times/${med.timeId}/toggle`, { method: 'PUT' }); } catch (_) { }
     };
 
-    const getGreeting = () => {
-        const h = new Date().getHours();
-        if (h < 12) return 'Good morning';
-        if (h < 17) return 'Good afternoon';
-        return 'Good evening';
-    };
-
-    const healthScore = !medsLoaded ? null : meds.length === 0 ? 100 : Math.round(adherencePct);
-    const firstName = user?.name?.split(' ')[0] || user?.full_name?.split(' ')[0] || 'there';
+    // Beam Interpolation
+    const translateX = beamAnim.interpolate({
+        inputRange: [-1, 1],
+        outputRange: [-SCREEN_WIDTH, SCREEN_WIDTH]
+    });
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor={COLORS.midnight} />
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
 
-                {/* ── Dark Header ── */}
-                <LinearGradient colors={GRADIENTS.hero} style={[styles.header, { paddingBottom: wp(7) }]}>
-                    <View style={styles.bgDeco1} />
-                    <View style={styles.bgDeco2} />
-
+                <LinearGradient colors={GRADIENTS.hero} style={styles.header}>
                     <View style={styles.headerTop}>
                         <View>
-                            <Text style={styles.greeting}>{getGreeting()}</Text>
+                            <Text style={styles.greeting}>Good morning,</Text>
                             <Text style={styles.userName}>{firstName} 👋</Text>
                         </View>
                         <View style={styles.headerActions}>
                             <TouchableOpacity style={styles.headerBtn} onPress={() => navigate('HISTORY')}>
-                                <MaterialCommunityIcons name="clipboard-text-outline" size={wp(5)} color="rgba(255,255,255,0.8)" />
+                                <MaterialCommunityIcons name="clipboard-text-outline" size={20} color="#fff" />
                             </TouchableOpacity>
                             <TouchableOpacity onPress={() => navigate('PROFILE')}>
                                 <LinearGradient colors={GRADIENTS.teal} style={styles.avatarGradient}>
-                                    <Text style={styles.avatarText}>{(user?.name || user?.full_name || 'U')[0].toUpperCase()}</Text>
+                                    <Text style={styles.avatarText}>{firstName[0].toUpperCase()}</Text>
                                 </LinearGradient>
                             </TouchableOpacity>
                         </View>
                     </View>
 
-                    <View style={[styles.healthCard, { marginHorizontal: wp(5), padding: wp(4.5) }]}>
+                    <View style={styles.healthCard}>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.healthCardLabel}>Health Score</Text>
-                            <Text style={[styles.healthScore, { fontSize: wp(11) }]}>{healthScore}</Text>
+                            <Text style={styles.healthCardLabel}>HEALTH SCORE</Text>
+                            <Text style={styles.healthScoreText}>{medsLoaded ? adherencePct : '--'}</Text>
                             <View style={styles.trendRow}>
-                                <Ionicons name="trending-up" size={13} color="#34D399" />
-                                <Text style={styles.trendText}>+3 this week</Text>
+                                <Ionicons name={weeklyTrend >= 0 ? "trending-up" : "trending-down"} size={14} color={weeklyTrend >= 0 ? "#34D399" : "#F87171"} />
+                                <Text style={[styles.trendText, { color: weeklyTrend >= 0 ? "#34D399" : "#F87171" }]}>
+                                    {weeklyTrend >= 0 ? `+${weeklyTrend}` : weeklyTrend} this week
+                                </Text>
                             </View>
-                            <View style={styles.adherenceRow}>
-                                <View style={styles.adherenceBarBg}>
-                                    <View style={[styles.adherenceBarFill, { width: `${adherencePct}%` }]} />
-                                </View>
-                                <Text style={styles.adherencePct}>{adherencePct}%</Text>
+                            <View style={styles.adherenceBarBg}>
+                                <View style={[styles.adherenceBarFill, { width: `${adherencePct}%` }]} />
                             </View>
                             <Text style={styles.adherenceLabel}>{takenCount}/{meds.length} doses today</Text>
                         </View>
                         <View style={styles.scoreCircleWrap}>
-                            <View style={[styles.scoreCircle, { width: wp(17), height: wp(17), borderRadius: wp(8.5) }]}>
-                                <Text style={[styles.scoreCircleVal, { fontSize: wp(4.5) }]}>{healthScore ?? '--'}</Text>
+                            <View style={styles.scoreCircle}>
+                                <Text style={styles.scoreCircleVal}>{medsLoaded ? adherencePct : '--'}</Text>
                                 <Text style={styles.scoreCircleSub}>/ 100</Text>
                             </View>
                             <View style={styles.streakBadge}>
-                                <Text style={styles.streakEmoji}>🔥</Text>
-                                <Text style={styles.streakText}>{takenCount > 0 ? 3 : 0} day streak</Text>
+                                <Text style={styles.streakText}>🔥 {takenCount > 0 ? '3 Day' : '0 Day'} Streak</Text>
                             </View>
                         </View>
                     </View>
                 </LinearGradient>
 
-                {/* ── Additional Features ── */}
                 <Animated.View style={[styles.section, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
                     <Text style={styles.sectionTitle}>Additional Features</Text>
                     <View style={styles.actionsGrid}>
                         {ADDITIONAL_FEATURES.map((action, i) => (
-                            <TouchableOpacity
-                                key={i}
-                                style={[styles.actionCard, { width: isTablet ? '15%' : '30%' }]}
-                                onPress={() => navigate(action.screen)}
-                                activeOpacity={0.8}
-                            >
+                            <TouchableOpacity key={i} style={[styles.actionCard, { width: isTablet ? '15%' : '30%' }]} onPress={() => navigate(action.screen)}>
                                 <LinearGradient colors={action.bg} style={styles.actionIconBox}>
                                     <MaterialCommunityIcons name={action.icon} size={22} color="#fff" />
                                 </LinearGradient>
@@ -181,188 +181,148 @@ export default function DashboardScreen({ user, navigate }) {
                     </View>
                 </Animated.View>
 
-                {/* ── Today's Medicines ── */}
-                <Animated.View style={[styles.section, { opacity: fadeAnim }]}>
+                <View style={styles.section}>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Today's Medicines</Text>
-                        <TouchableOpacity onPress={() => navigate('DOSE_TRACKER')} style={styles.seeAllBtn}>
+                        <TouchableOpacity onPress={() => navigate('DOSE_TRACKER')}>
                             <Text style={styles.seeAllText}>See all</Text>
-                            <Feather name="chevron-right" size={13} color={COLORS.primary} />
                         </TouchableOpacity>
                     </View>
-
                     {meds.length === 0 ? (
                         <TouchableOpacity style={styles.emptyCard} onPress={() => navigate('SCANNER')}>
-                            <LinearGradient colors={GRADIENTS.teal} style={styles.emptyIcon}>
-                                <MaterialCommunityIcons name="pill-multiple" size={26} color="#fff" />
-                            </LinearGradient>
                             <Text style={styles.emptyTitle}>No medicines yet</Text>
                             <Text style={styles.emptyText}>Scan a prescription to track your doses</Text>
-                            <View style={styles.emptyCtaBtn}>
-                                <Text style={styles.emptyCtaText}>Scan Now →</Text>
-                            </View>
                         </TouchableOpacity>
                     ) : (
                         meds.slice(0, 4).map(med => (
-                            <TouchableOpacity
-                                key={med.id}
-                                style={[styles.medRow, med.taken && styles.medRowDone]}
-                                onPress={() => toggleMed(med.id)}
-                                activeOpacity={0.75}
-                            >
+                            <TouchableOpacity key={med.id} style={[styles.medRow, med.taken && styles.medRowDone]} onPress={() => toggleMed(med.id)}>
                                 <View style={[styles.medTimeBox, med.taken && styles.medTimeBoxDone]}>
-                                    <Text style={[styles.medTimeHour, med.taken && styles.textDone]}>
-                                        {med.time.split(':')[0]}
-                                    </Text>
-                                    <Text style={[styles.medTimeAMPM, med.taken && styles.textDone]}>
-                                        {med.time.toUpperCase().includes('PM') ? 'PM' : 'AM'}
-                                    </Text>
+                                    <Text style={[styles.medTimeText, med.taken && styles.textDone]}>{med.time}</Text>
                                 </View>
-                                <View style={[styles.medIconBox, med.taken && styles.medIconBoxDone]}>
-                                    <MaterialCommunityIcons name={med.icon} size={19} color={med.taken ? COLORS.textMuted : COLORS.primary} />
-                                </View>
-                                <View style={{ flex: 1 }}>
+                                <View style={{ flex: 1, marginLeft: 12 }}>
                                     <Text style={[styles.medName, med.taken && styles.medNameDone]}>{med.name}</Text>
-                                    <Text style={styles.medDose}>{med.dose}{med.dose && med.label ? ' • ' : ''}{med.label || ''}</Text>
+                                    <Text style={styles.medDose}>{med.dose}</Text>
                                 </View>
                                 <View style={[styles.medCheck, med.taken && styles.medCheckDone]}>
-                                    {med.taken
-                                        ? <Feather name="check" size={13} color="#fff" />
-                                        : <View style={styles.medCheckEmpty} />
-                                    }
+                                    {med.taken && <Feather name="check" size={14} color="#fff" />}
                                 </View>
                             </TouchableOpacity>
                         ))
                     )}
-                </Animated.View>
+                </View>
 
-                {/* ── Recent Prescriptions ── */}
-                <Animated.View style={{ opacity: fadeAnim }}>
-                    <View style={[styles.sectionHeader, { paddingHorizontal: wp(5), marginBottom: 0 }]}>
+                <View style={{ marginTop: 20 }}>
+                    <View style={[styles.sectionHeader, { paddingHorizontal: 20 }]}>
                         <Text style={styles.sectionTitle}>Recent Rx</Text>
-                        <TouchableOpacity onPress={() => navigate('HISTORY')} style={styles.seeAllBtn}>
-                            <Text style={styles.seeAllText}>See all</Text>
-                            <Feather name="chevron-right" size={13} color={COLORS.primary} />
-                        </TouchableOpacity>
                     </View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.rxScrollContent, { paddingHorizontal: wp(5) }]}>
-                        <TouchableOpacity style={[styles.rxCardNew, { width: wp(35) }]} onPress={() => navigate('SCANNER')}>
-                            <LinearGradient colors={GRADIENTS.teal} style={styles.rxNewIconBox}>
-                                <Feather name="plus" size={22} color="#fff" />
-                            </LinearGradient>
-                            <Text style={styles.rxNewText}>Scan New{'\n'}Prescription</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rxScroll}>
+                        <TouchableOpacity style={styles.rxCardNew} onPress={() => navigate('SCANNER')}>
+                            <Feather name="plus" size={20} color={COLORS.primary} />
+                            <Text style={styles.rxNewText}>Scan New</Text>
                         </TouchableOpacity>
                         {recentScans.map(scan => (
-                            <TouchableOpacity
-                                key={scan.id}
-                                style={[styles.rxCard, { width: wp(38) }]}
-                                onPress={() => navigate('PRESCRIPTION_DETAIL', { record: scan.fullRecord, refreshHistory: fetchDashboardData })}
-                                activeOpacity={0.8}
-                            >
-                                <View style={styles.rxCardTop}>
-                                    <LinearGradient colors={GRADIENTS.teal} style={styles.rxIconBox}>
-                                        <Feather name="file-text" size={14} color="#fff" />
-                                    </LinearGradient>
-                                    <Text style={styles.rxDate}>{scan.date}</Text>
-                                </View>
-                                <Text style={styles.rxCondition} numberOfLines={2}>{scan.condition}</Text>
-                                <View style={styles.rxMedsBadge}>
-                                    <MaterialCommunityIcons name="pill" size={11} color={COLORS.primary} />
-                                    <Text style={styles.rxMedsText}>{scan.meds} meds</Text>
-                                </View>
+                            <TouchableOpacity key={scan.id} style={styles.rxCard}>
+                                <Text style={styles.rxDate}>{scan.date}</Text>
+                                <Text style={styles.rxCondition} numberOfLines={1}>{scan.condition}</Text>
+                                <Text style={styles.rxMedsCount}>{scan.meds} meds</Text>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
-                </Animated.View>
-
-                {/* ── Insight Card ── */}
-                <View style={styles.section}>
-                    <LinearGradient colors={['#0F766E', '#0891B2']} style={styles.insightCard}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.insightTag}>💡  HEALTH TIP</Text>
-                            <Text style={styles.insightTitle}>Generic = Same Medicine</Text>
-                            <Text style={styles.insightBody}>Generic medicines contain identical active ingredients.</Text>
-                        </View>
-                        <MaterialCommunityIcons name="lightbulb-on-outline" size={wp(10)} color="rgba(255,255,255,0.18)" />
-                    </LinearGradient>
                 </View>
+
+                {/* ── Health Tip Card with Neural Beam ── */}
+                <View style={styles.section}>
+                    <View style={styles.insightCardContainer}>
+                        <LinearGradient colors={['#0F766E', '#0891B2']} style={styles.insightCard}>
+                            {/* Neural Beam Shimmer */}
+                            <Animated.View style={[styles.neuralBeam, { transform: [{ translateX }] }]}>
+                                <LinearGradient 
+                                    colors={['transparent', 'rgba(255,255,255,0.0)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0.0)', 'transparent']} 
+                                    start={{x: 0, y: 0}} end={{x: 1, y: 0}}
+                                    style={{flex: 1}} 
+                                />
+                            </Animated.View>
+
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.insightTag}>💡 HEALTH TIP</Text>
+                                <Text style={styles.insightTitle}>{activeTip.title}</Text>
+                                <Text style={styles.insightBody}>{activeTip.body}</Text>
+                            </View>
+                            <MaterialCommunityIcons name="lightbulb-on-outline" size={36} color="rgba(255,255,255,0.2)" />
+                        </LinearGradient>
+                    </View>
+                </View>
+
             </ScrollView>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: COLORS.background },
-    header: { overflow: 'hidden', position: 'relative' },
-    bgDeco1: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(13,148,136,0.1)', top: -50, right: -50 },
-    bgDeco2: { position: 'absolute', width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(8,145,178,0.07)', bottom: 0, left: -30 },
-    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 20, paddingBottom: 18 },
-    greeting: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '600', letterSpacing: 0.3 },
-    userName: { fontSize: 24, fontWeight: '900', color: '#fff', letterSpacing: -0.5, marginTop: 2 },
+    container: { flex: 1, backgroundColor: '#F8FAFC' },
+    header: { 
+        paddingTop: Platform.OS === 'android' ? 45 : 15,
+        paddingBottom: 30,
+        borderBottomLeftRadius: 28,
+        borderBottomRightRadius: 28,
+    },
+    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, marginBottom: 15 },
+    greeting: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
+    userName: { fontSize: 24, fontWeight: '900', color: '#fff' },
     headerActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-    headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+    headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
     avatarGradient: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-    avatarText: { fontSize: 15, fontWeight: '800', color: '#fff' },
-    healthCard: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.11)' },
-    healthCardLabel: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.5)', marginBottom: 2 },
-    healthScore: { fontWeight: '900', color: '#fff', letterSpacing: -1 },
-    trendRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 12 },
-    trendText: { fontSize: 12, fontWeight: '600', color: '#34D399' },
-    adherenceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-    adherenceBarBg: { flex: 1, height: 5, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 3, overflow: 'hidden' },
+    avatarText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+    
+    healthCard: { backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: 20, borderRadius: 20, padding: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+    healthCardLabel: { fontSize: 10, fontWeight: '800', color: 'rgba(255,255,255,0.5)', letterSpacing: 0.5 },
+    healthScoreText: { fontSize: 34, fontWeight: '900', color: '#fff', marginTop: 2 },
+    trendRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
+    trendText: { fontSize: 12, fontWeight: '700' },
+    adherenceBarBg: { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, marginBottom: 6, width: '75%' },
     adherenceBarFill: { height: 5, backgroundColor: '#5EEAD4', borderRadius: 3 },
-    adherencePct: { fontSize: 11, fontWeight: '700', color: '#5EEAD4', minWidth: 30 },
-    adherenceLabel: { fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: '500' },
-    scoreCircleWrap: { alignItems: 'center', gap: 10, paddingLeft: 14 },
-    scoreCircle: { backgroundColor: 'rgba(13,148,136,0.25)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(94,234,212,0.35)' },
-    scoreCircleVal: { fontWeight: '900', color: '#fff' },
-    scoreCircleSub: { fontSize: 9, fontWeight: '600', color: 'rgba(255,255,255,0.45)' },
-    streakBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(245,158,11,0.2)', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10 },
-    streakEmoji: { fontSize: 13 },
-    streakText: { fontSize: 10, fontWeight: '700', color: '#FCD34D' },
-    section: { paddingHorizontal: 20, marginTop: 28 },
-    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-    sectionTitle: { fontSize: 17, fontWeight: '800', color: COLORS.textPrimary },
-    seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-    seeAllText: { fontSize: 13, fontWeight: '600', color: COLORS.primary },
+    adherenceLabel: { fontSize: 11, color: '#fff', opacity: 0.7 },
+    
+    scoreCircleWrap: { alignItems: 'center', marginLeft: 15 },
+    scoreCircle: { width: 68, height: 68, borderRadius: 34, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#5EEAD4' },
+    scoreCircleVal: { fontSize: 20, fontWeight: '900', color: '#fff' },
+    scoreCircleSub: { fontSize: 9, color: 'rgba(255,255,255,0.5)' },
+    streakBadge: { backgroundColor: '#F59E0B', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginTop: -8 },
+    streakText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+
+    section: { paddingHorizontal: 20, marginTop: 25 },
+    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    sectionTitle: { fontSize: 17, fontWeight: '800', color: '#1E293B' },
+    seeAllText: { fontSize: 13, fontWeight: '700', color: '#0D9488' },
+
     actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    actionCard: { alignItems: 'center', gap: 8, marginBottom: 14 },
-    actionIconBox: { width: 54, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center', ...SHADOWS.colored },
-    actionLabel: { fontSize: 11, fontWeight: '700', color: COLORS.textPrimary, textAlign: 'center' },
-    medRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.white, borderRadius: 16, padding: 13, marginBottom: 9, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm },
-    medRowDone: { opacity: 0.6, backgroundColor: COLORS.lightGray },
-    medTimeBox: { alignItems: 'center', minWidth: 36, backgroundColor: COLORS.successBg, paddingVertical: 7, paddingHorizontal: 8, borderRadius: 10 },
-    medTimeBoxDone: { backgroundColor: COLORS.lightGray },
-    medTimeHour: { fontSize: 15, fontWeight: '800', color: COLORS.primary },
-    medTimeAMPM: { fontSize: 9, fontWeight: '600', color: COLORS.primary, marginTop: 1 },
-    textDone: { color: COLORS.textMuted },
-    medIconBox: { width: 36, height: 36, borderRadius: 11, backgroundColor: COLORS.successBg, justifyContent: 'center', alignItems: 'center' },
-    medIconBoxDone: { backgroundColor: COLORS.lightGray },
-    medName: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary },
-    medNameDone: { textDecorationLine: 'line-through', color: COLORS.textSecondary },
-    medDose: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-    medCheck: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: COLORS.border, justifyContent: 'center', alignItems: 'center' },
-    medCheckDone: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-    medCheckEmpty: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.border },
-    emptyCard: { backgroundColor: COLORS.white, borderRadius: 20, padding: 28, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed', gap: 8, ...SHADOWS.sm },
-    emptyIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
-    emptyTitle: { fontSize: 15, fontWeight: '800', color: COLORS.textPrimary },
-    emptyText: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center' },
-    emptyCtaBtn: { marginTop: 8, backgroundColor: COLORS.successBg, paddingHorizontal: 20, paddingVertical: 9, borderRadius: 20 },
-    emptyCtaText: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-    rxScrollContent: { paddingTop: 14, paddingBottom: 8, gap: 10 },
-    rxCardNew: { backgroundColor: COLORS.successBg, borderRadius: 18, padding: 18, alignItems: 'center', gap: 10, borderWidth: 1.5, borderColor: COLORS.primaryLight, borderStyle: 'dashed' },
-    rxNewIconBox: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-    rxNewText: { fontSize: 13, fontWeight: '700', color: COLORS.primary, textAlign: 'center', lineHeight: 19 },
-    rxCard: { backgroundColor: COLORS.white, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.sm, gap: 8 },
-    rxCardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    rxIconBox: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-    rxDate: { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary },
-    rxCondition: { fontSize: 13, fontWeight: '700', color: COLORS.textPrimary, lineHeight: 19 },
-    rxMedsBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.successBg, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
-    rxMedsText: { fontSize: 11, fontWeight: '600', color: COLORS.primary },
-    insightCard: { borderRadius: 20, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 12, overflow: 'hidden', ...SHADOWS.colored },
-    insightTag: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.6)', letterSpacing: 0.8, marginBottom: 6 },
-    insightTitle: { fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 7 },
-    insightBody: { fontSize: 13, color: 'rgba(255,255,255,0.72)', lineHeight: 20 },
+    actionCard: { alignItems: 'center', marginBottom: 15 },
+    actionIconBox: { width: 54, height: 54, borderRadius: 16, justifyContent: 'center', alignItems: 'center', ...SHADOWS.sm },
+    actionLabel: { fontSize: 11, fontWeight: '700', color: '#475569', marginTop: 6 },
+
+    medRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 16, marginBottom: 10, ...SHADOWS.sm },
+    medRowDone: { opacity: 0.6 },
+    medTimeBox: { backgroundColor: '#F0FDFA', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8 },
+    medTimeText: { fontSize: 12, fontWeight: '800', color: '#0D9488' },
+    medName: { fontSize: 15, fontWeight: '700', color: '#1E293B' },
+    medNameDone: { textDecorationLine: 'line-through' },
+    medDose: { fontSize: 12, color: '#64748B' },
+    medCheck: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#CBD5E1', justifyContent: 'center', alignItems: 'center' },
+    medCheckDone: { backgroundColor: '#0D9488', borderColor: '#0D9488' },
+    
+    rxScroll: { paddingLeft: 20, paddingRight: 10, paddingBottom: 10 },
+    rxCard: { backgroundColor: '#fff', width: 135, padding: 15, borderRadius: 18, marginRight: 12, ...SHADOWS.sm },
+    rxCardNew: { backgroundColor: '#F0FDFA', width: 110, padding: 15, borderRadius: 18, marginRight: 12, alignItems: 'center', justifyContent: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#0D9488' },
+    rxNewText: { fontSize: 12, fontWeight: '800', color: '#0D9488', marginTop: 5 },
+    rxDate: { fontSize: 10, fontWeight: '700', color: '#94A3B8' },
+    rxCondition: { fontSize: 13, fontWeight: '800', color: '#1E293B', marginVertical: 3 },
+    rxMedsCount: { fontSize: 11, fontWeight: '600', color: '#0D9488' },
+
+    insightCardContainer: { borderRadius: 20, overflow: 'hidden', ...SHADOWS.sm },
+    insightCard: { padding: 18, flexDirection: 'row', alignItems: 'center', position: 'relative' },
+    neuralBeam: { position: 'absolute', top: 0, bottom: 0, left: 0, width: '60%', zIndex: 1 },
+    insightTag: { fontSize: 9, fontWeight: '800', color: 'rgba(255,255,255,0.6)', letterSpacing: 1, marginBottom: 4 },
+    insightTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
+    insightBody: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4, lineHeight: 18 },
+    emptyCard: { padding: 20, backgroundColor: '#fff', borderRadius: 18, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#CBD5E1' },
 });
