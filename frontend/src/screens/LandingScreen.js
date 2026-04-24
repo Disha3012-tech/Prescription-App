@@ -245,12 +245,11 @@ export default function LandingScreen({ navigate }) {
                 <Text style={styles.brandSub}>AI</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.statusPill} onPress={() => navigate && navigate('LOGIN')}>
+            
               <LinearGradient colors={[THEME.primary + '20', THEME.accent + '15']} style={styles.statusPillInner}>
                 <View style={styles.pulse} />
                 <Text style={styles.statusText}>VERIFIED: 2026</Text>
               </LinearGradient>
-            </TouchableOpacity>
           </View>
         </View>
 

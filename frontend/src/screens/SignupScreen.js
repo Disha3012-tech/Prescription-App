@@ -7,12 +7,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { API_URL } from '../config';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
-//import * as AuthSession from 'expo-auth-session';
-import GoogleIcon from '../components/GoogleIcon';
-
-WebBrowser.maybeCompleteAuthSession();
 
 const THEME = {
   background: ['#F0FDFA', '#E0F2FE', '#F0F9FF'],
@@ -128,7 +122,7 @@ export default function SignupScreen({ navigate, setUser }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
-  const [agreed, setAgreed] = useState(false);
+  const [isTicked, setIsTicked] = useState(false); // Checkbox state
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const [pendingUserId, setPendingUserId] = useState(null);
@@ -161,69 +155,13 @@ export default function SignupScreen({ navigate, setUser }) {
     },
   })).current;
 
-  // Google Auth
-  const redirectUri = AuthSession.makeRedirectUri({
-    native: 'https://auth.expo.io/@srijani67/presription-scanner',
-    web: 'http://localhost:8081',
-  });
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    // no redirectUri at all — let Expo handle it automatically
-  });
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const token = response.authentication?.accessToken;
-      if (token) handleGoogleSuccess(token);
-    }
-  }, [response]);
-
-  const onGoogleTap = () => promptAsync();
-  const handleGoogleSuccess = async (accessToken) => {
-    setLoading(true);
-    try {
-      let email, full_name;
-
-      // Try fetching user info with access token
-      try {
-        const userInfoRes = await fetch('https://www.googleapis.com/userinfo/v2/me', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const googleUser = await userInfoRes.json();
-        email = googleUser.email;
-        full_name = googleUser.name;
-      } catch {
-        // Fallback if userinfo fetch fails
-        email = 'google_user_' + Date.now() + '@gmail.com';
-        full_name = 'Google User';
-      }
-
-      const res = await fetch(`${API_URL}api/auth/social-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, full_name, provider: 'google' }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        if (setUser) setUser({ ...data.user, name: data.user.full_name, token: data.access_token });
-        navigate('DASHBOARD');
-      } else {
-        setErrorMsg(data.detail || 'Google authentication failed');
-      }
-    } catch {
-      setErrorMsg('Connection failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSignup = async () => {
     if (!name) return setErrorMsg('Full name is required');
     if (!email) return setErrorMsg('Email is required');
     if (!password) return setErrorMsg('Password is required');
     if (password !== confirmPassword) return setErrorMsg('Passwords do not match');
-    if (!agreed) return setErrorMsg('Please agree to Terms & Privacy');
+    if (!isTicked) return; // Final safety check
+
     setErrorMsg(null); setLoading(true);
     try {
       const res = await fetch(`${API_URL}api/auth/register`, {
@@ -250,7 +188,6 @@ export default function SignupScreen({ navigate, setUser }) {
     } catch { setErrorMsg('Network error'); } finally { setLoading(false); }
   };
 
-  /* Step progress dots */
   const StepDots = () => (
     <View style={styles.stepDots}>
       {[1, 2].map(s => (
@@ -297,7 +234,6 @@ export default function SignupScreen({ navigate, setUser }) {
                   </View>
                 </View>
 
-                {/* Step indicator pill */}
                 <LinearGradient colors={[THEME.primary + '18', THEME.accent + '12']} style={styles.stepPill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                   <Text style={styles.stepPillText}>Step {step} of 2</Text>
                   <StepDots />
@@ -327,10 +263,8 @@ export default function SignupScreen({ navigate, setUser }) {
 
               {/* ── Form Card ── */}
               <View style={[styles.card, isTablet && { padding: 32 }]}>
-                {/* Card top gradient strip */}
                 <LinearGradient colors={[THEME.primary + '14', THEME.accent + '08', 'transparent']} style={styles.cardStrip} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
 
-                {/* Card header row */}
                 <View style={styles.cardHeaderRow}>
                   <LinearGradient colors={[THEME.primary, THEME.accent]} style={styles.cardHeaderIcon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                     <MaterialCommunityIcons name={step === 1 ? 'account-edit-outline' : 'email-check-outline'} size={18} color="#FFF" />
@@ -341,7 +275,6 @@ export default function SignupScreen({ navigate, setUser }) {
                   </View>
                 </View>
 
-                {/* Error */}
                 {errorMsg && (
                   <View style={styles.errorBox}>
                     <MaterialCommunityIcons name="alert-circle-outline" size={16} color={THEME.error} />
@@ -357,21 +290,20 @@ export default function SignupScreen({ navigate, setUser }) {
                     <StrengthBar password={password} />
                     <InputField label="Confirm Password" icon="lock-check-outline" placeholder="Repeat your password" value={confirmPassword} onChangeText={setConfirmPassword} secureText={!showPassword} focusedField={focusedField} fieldKey="confirm" setFocusedField={setFocusedField} />
 
-                    {/* Terms checkbox */}
-                    <TouchableOpacity style={styles.termsRow} onPress={() => setAgreed(!agreed)} activeOpacity={0.8}>
-                      <View style={[styles.checkbox, agreed && styles.checkboxOn]}>
-                        {agreed && (
+                    {/* NEW CUSTOM CHECKBOX */}
+                    <TouchableOpacity style={styles.termsRow} onPress={() => setIsTicked(!isTicked)} activeOpacity={0.8}>
+                      <View style={[styles.checkbox, isTicked && styles.checkboxOn]}>
+                        {isTicked && (
                           <LinearGradient colors={[THEME.primary, THEME.accent]} style={styles.checkboxGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
                             <Feather name="check" size={11} color="#FFF" />
                           </LinearGradient>
                         )}
                       </View>
-                      <Text style={styles.termsText}>I agree to the <Text style={styles.termsLink}>Terms & Privacy Policy</Text></Text>
+                      <Text style={styles.termsText}>Subscribe to personalized <Text style={styles.termsLink}>health insights & tips</Text></Text>
                     </TouchableOpacity>
                   </>
                 ) : (
                   <>
-                    {/* OTP display hint */}
                     <View style={styles.otpHint}>
                       <MaterialCommunityIcons name="email-fast-outline" size={32} color={THEME.primary} />
                       <Text style={styles.otpHintText}>Check your inbox at{'\n'}<Text style={styles.otpEmail}>{email}</Text></Text>
@@ -383,14 +315,22 @@ export default function SignupScreen({ navigate, setUser }) {
                   </>
                 )}
 
-                {/* Submit button */}
+                {/* Updated Submit Button logic */}
                 <TouchableOpacity
-                  style={[styles.submitBtn, (!agreed && step === 1) && { opacity: 0.5 }]}
+                  style={[
+                    styles.submitBtn, 
+                    (step === 1 && !isTicked) && styles.submitBtnDisabled // Visual feedback for disabled state
+                  ]}
                   onPress={step === 1 ? handleSignup : handleVerify}
-                  disabled={loading || (!agreed && step === 1)}
+                  disabled={loading || (step === 1 && !isTicked)} // Functional disable
                   activeOpacity={0.88}
                 >
-                  <LinearGradient colors={[THEME.primary, THEME.primaryDark, '#064E3B']} style={styles.submitBtnGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                  <LinearGradient 
+                    colors={ (step === 1 && !isTicked) ? ['#CBD5E1', '#94A3B8'] : [THEME.primary, THEME.primaryDark, '#064E3B']} 
+                    style={styles.submitBtnGrad} 
+                    start={{ x: 0, y: 0 }} 
+                    end={{ x: 1, y: 0 }}
+                  >
                     {loading ? (
                       <ActivityIndicator color="#FFF" size="small" />
                     ) : (
@@ -404,28 +344,6 @@ export default function SignupScreen({ navigate, setUser }) {
                 </TouchableOpacity>
               </View>
 
-              {step === 1 && (
-                <>
-                  {/* Divider */}
-                  <View style={styles.divider}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
-                    <View style={styles.dividerLine} />
-                  </View>
-
-                  {/* Google Button */}
-                  <TouchableOpacity style={styles.googleBtn} onPress={onGoogleTap} disabled={loading} activeOpacity={0.85}>
-                    <LinearGradient colors={[THEME.surface, THEME.surface]} style={styles.googleBtnInner} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                      <View style={styles.googleIconWrap}>
-                        <GoogleIcon size={20} />
-                      </View>
-                      <Text style={styles.googleBtnText}>Sign up with Google</Text>
-                      <Feather name="arrow-right" size={16} color={THEME.textMuted} />
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </>
-              )}
-
               {/* Footer */}
               <View style={styles.footer}>
                 <Text style={styles.footerText}>Already have a AiLyze account? </Text>
@@ -434,7 +352,6 @@ export default function SignupScreen({ navigate, setUser }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Bottom trust row */}
               <View style={styles.trustRow}>
                 <View style={styles.trustItem}>
                   <Ionicons name="shield-checkmark" size={12} color={THEME.primary} />
@@ -460,20 +377,13 @@ export default function SignupScreen({ navigate, setUser }) {
   );
 }
 
-/* ─────────── STYLES ─────────── */
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
-  /* Background */
   bgGlowTop: { position: 'absolute', top: '-18%', right: '-12%', opacity: 0.42 },
   bgGlowBottom: { position: 'absolute', bottom: '-18%', left: '-22%', opacity: 0.3 },
   bgGlowMid: { position: 'absolute', top: '38%', right: '8%', opacity: 0.5 },
-
-  /* Scroll & page */
   scrollContent: { flexGrow: 1, alignItems: 'center', paddingBottom: 50 },
   pageWrap: { width: '100%', paddingHorizontal: 20 },
-
-  /* Header */
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, marginBottom: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn: { borderRadius: 12, overflow: 'hidden' },
@@ -486,8 +396,6 @@ const styles = StyleSheet.create({
   stepDots: { flexDirection: 'row', gap: 4 },
   stepDot: { height: 6, borderRadius: 3, width: 6 },
   stepDotActive: { width: 18 },
-
-  /* Hero */
   heroBlock: { marginBottom: 24 },
   heroBadgeRow: { flexDirection: 'row', marginBottom: 14 },
   heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 13, paddingVertical: 6, borderRadius: 30 },
@@ -496,8 +404,6 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 36, fontWeight: '900', color: THEME.textMain, lineHeight: 44, letterSpacing: -1.5, marginBottom: 10 },
   heroAccent: { color: THEME.accent },
   heroSub: { fontSize: 14, color: THEME.textMuted, lineHeight: 22, fontWeight: '500' },
-
-  /* Card */
   card: {
     backgroundColor: THEME.surface,
     borderRadius: 28,
@@ -517,12 +423,8 @@ const styles = StyleSheet.create({
   cardHeaderIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '800', color: THEME.textMain },
   cardSubtitle: { fontSize: 12, color: THEME.textMuted, marginTop: 2 },
-
-  /* Error */
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: THEME.error + '12', padding: 12, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: THEME.error + '30' },
   errorText: { fontSize: 13, color: THEME.error, fontWeight: '600', flex: 1 },
-
-  /* Input fields */
   fieldWrapper: { marginBottom: 14 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: THEME.textMain, marginBottom: 7, letterSpacing: 0.3 },
   fieldBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: THEME.border, borderRadius: 14, paddingHorizontal: 14, height: 50 },
@@ -530,50 +432,28 @@ const styles = StyleSheet.create({
   fieldIconWrap: { marginRight: 10 },
   fieldInput: { flex: 1, fontSize: 15, color: THEME.textMain, fontWeight: '500' },
   fieldToggle: { padding: 4 },
-
-  /* Password strength */
   strengthRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -6, marginBottom: 10, paddingHorizontal: 2 },
   strengthSegOuter: { flex: 1, height: 4, borderRadius: 2, overflow: 'hidden' },
   strengthSegFill: { flex: 1, height: '100%' },
   strengthLabel: { fontSize: 11, fontWeight: '700', minWidth: 40 },
-
-  /* Terms */
   termsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16, marginBottom: 4 },
   checkbox: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: THEME.border, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: '#F8FAFC' },
   checkboxOn: { borderColor: THEME.primary },
   checkboxGrad: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
   termsText: { fontSize: 13, color: THEME.textMuted, fontWeight: '500' },
   termsLink: { color: THEME.primary, fontWeight: '700' },
-
-  /* OTP step */
   otpHint: { alignItems: 'center', padding: 20, backgroundColor: THEME.tealLight + '50', borderRadius: 18, marginBottom: 20 },
   otpHintText: { textAlign: 'center', fontSize: 14, color: THEME.textMuted, marginTop: 10, lineHeight: 22 },
   otpEmail: { color: THEME.primaryDark, fontWeight: '800' },
   backToStep1: { marginBottom: 8 },
   backToStep1Text: { fontSize: 13, color: THEME.accent, fontWeight: '600' },
-
-  /* Submit */
   submitBtn: { marginTop: 22, borderRadius: 100, overflow: 'hidden', shadowColor: THEME.primaryDark, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 8 },
+  submitBtnDisabled: { shadowOpacity: 0, elevation: 0 },
   submitBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 17, borderRadius: 100 },
   submitBtnText: { color: '#FFF', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
-
-  /* Divider */
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: THEME.border },
-  dividerText: { fontSize: 11, color: THEME.textMuted, fontWeight: '700', letterSpacing: 1 },
-
-  /* Google button */
-  googleBtn: { borderRadius: 16, overflow: 'hidden', borderWidth: 1.5, borderColor: THEME.border, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 3 },
-  googleBtnInner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 16 },
-  googleIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: THEME.border },
-  googleBtnText: { flex: 1, fontSize: 15, fontWeight: '700', color: THEME.textMain, marginLeft: 12 },
-
-  /* Footer */
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   footerText: { fontSize: 14, color: THEME.textMuted },
   footerLink: { fontSize: 14, color: THEME.primaryDark, fontWeight: '900' },
-
-  /* Trust row */
   trustRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: 4, paddingBottom: 10 },
   trustItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   trustText: { fontSize: 11, color: THEME.textMuted, fontWeight: '600' },

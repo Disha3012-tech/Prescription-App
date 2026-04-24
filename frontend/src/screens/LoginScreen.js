@@ -336,24 +336,6 @@ export default function LoginScreen({ navigate, setUser }) {
                 </TouchableOpacity>
               </View>
 
-              {/* ── Divider ── */}
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              {/* ── Google Button ── */}
-              <TouchableOpacity style={styles.googleBtn} onPress={onGoogleTap} disabled={loading} activeOpacity={0.85}>
-                <View style={styles.googleBtnInner}>
-                  <View style={styles.googleIconWrap}>
-                    <GoogleIcon size={20} />
-                  </View>
-                  <Text style={styles.googleBtnText}>Sign in with Google</Text>
-                  <Feather name="arrow-right" size={16} color={THEME.textMuted} />
-                </View>
-              </TouchableOpacity>
-
               {/* ── Footer ── */}
               <View style={styles.footer}>
                 <Text style={styles.footerText}>New to AiLyze? </Text>
