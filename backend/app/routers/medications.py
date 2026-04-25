@@ -3,22 +3,40 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import models, schemas
 from typing import List, Optional
+from datetime import date as date_type
 from pydantic import BaseModel
 from ..utils import check_and_reset_daily, update_streak_on_dose
 
 router = APIRouter(prefix="/api/medications", tags=["Medications"])
 
 @router.get("", response_model=List[schemas.MedicationResponse])
-async def get_medications(user_id: str, member_id: Optional[str] = None, db: Session = Depends(get_db)):
-    # Daily reset check
+async def get_medications(
+    user_id: str,
+    member_id: Optional[str] = None,
+    date: Optional[str] = None,       # ← NEW: "YYYY-MM-DD"
+    db: Session = Depends(get_db)
+):
     check_and_reset_daily(user_id, db)
-    
+    target_date = date or date_type.today().isoformat()
+
     query = db.query(models.Medication).filter(models.Medication.user_id == user_id)
     if member_id:
         query = query.filter(models.Medication.member_id == member_id)
     else:
         query = query.filter(models.Medication.member_id == None)
-    return query.all()
+
+    meds = query.all()
+
+    # Overlay taken status from DoseLog for the target date
+    for med in meds:
+        for t in med.times:
+            log = db.query(models.DoseLog).filter(
+                models.DoseLog.medication_time_id == t.id,
+                models.DoseLog.date == target_date,
+            ).first()
+            t.taken = log.taken if log else False   # Override in-memory only
+
+    return meds
 
 @router.post("", response_model=schemas.MedicationResponse)
 async def create_medication(req: schemas.MedicationCreate, db: Session = Depends(get_db)):
@@ -200,23 +218,52 @@ async def search_explain_medication(name: str, country: str = "India", currency:
 # ─── Times toggle ─────────────────────────────────────────────────────────────
 
 @router.put("/{medication_id}/times/{time_id}/toggle")
-async def toggle_time(medication_id: str, time_id: str, db: Session = Depends(get_db)):
-    time_entry = db.query(models.MedicationTime).filter(models.MedicationTime.id == time_id).first()
-    if not time_entry:
-        raise HTTPException(status_code=404, detail="Time entry not found")
-    time_entry.taken = not time_entry.taken
-    
-    # Decrement remaining quantity when a dose is taken
-    if time_entry.taken:
-        med = db.query(models.Medication).filter(models.Medication.id == medication_id).first()
-        if med and med.remaining_quantity is not None and med.remaining_quantity > 0:
+async def toggle_time(
+    medication_id: str,
+    time_id: str,
+    date: Optional[str] = None,   # ← accept date param e.g. "2025-04-26"
+    db: Session = Depends(get_db)
+):
+    target_date = date or date_type.today().isoformat()
+
+    # Find or create a DoseLog entry for this specific day
+    log = db.query(models.DoseLog).filter(
+        models.DoseLog.medication_time_id == time_id,
+        models.DoseLog.date == target_date,
+    ).first()
+
+    if not log:
+        time_entry = db.query(models.MedicationTime).filter(
+            models.MedicationTime.id == time_id
+        ).first()
+        if not time_entry:
+            raise HTTPException(status_code=404, detail="Time entry not found")
+
+        med = db.query(models.Medication).filter(
+            models.Medication.id == medication_id
+        ).first()
+
+        log = models.DoseLog(
+            medication_time_id=time_id,
+            user_id=med.user_id,
+            date=target_date,
+            taken=True,
+        )
+        db.add(log)
+    else:
+        log.taken = not log.taken
+
+    # Decrement quantity and update streak only when marking as taken
+    if log.taken:
+        med = db.query(models.Medication).filter(
+            models.Medication.id == medication_id
+        ).first()
+        if med and med.remaining_quantity and med.remaining_quantity > 0:
             med.remaining_quantity = max(0, med.remaining_quantity - 1)
-        
-        # Update streak
         update_streak_on_dose(med.user_id, db)
-    
+
     db.commit()
-    return {"status": "success", "taken": time_entry.taken}
+    return {"status": "success", "taken": log.taken}
 
 class TimeUpdateRequest(BaseModel):
     time: str

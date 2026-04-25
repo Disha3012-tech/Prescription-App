@@ -121,3 +121,13 @@ class SymptomLookup(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="symptom_lookups")
+class DoseLog(Base):
+    __tablename__ = "dose_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    medication_time_id = Column(String, ForeignKey("medication_times.id", ondelete="CASCADE"))
+    user_id = Column(String, ForeignKey("users.id"))
+    date = Column(String, index=True)   # Store as "YYYY-MM-DD"
+    taken = Column(Boolean, default=False)
+
+    medication_time = relationship("MedicationTime")
